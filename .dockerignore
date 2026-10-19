@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+frontend
+data
+api
+worker
+replica
+cmd/replica/replica
+*.log

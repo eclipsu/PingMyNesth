@@ -8,7 +8,9 @@ SELECT * FROM users WHERE email = $1;
 UPDATE users SET verified = true WHERE id = $1;
 
 -- name: CreateWatch :one
-INSERT INTO watches (user_id, class_nbr) VALUES ($1, $2) RETURNING *;
+INSERT INTO watches (user_id, class_nbr) VALUES ($1, $2)
+ON CONFLICT (user_id, class_nbr) DO UPDATE SET active = true
+RETURNING *;
 
 -- name: GetActiveWatchersForSection :many
 SELECT

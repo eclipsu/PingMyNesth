@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 )
+
+// a hung email API shouldn't stall the poller
+var httpClient = &http.Client{Timeout: 15 * time.Second}
 
 type EmailSender struct {
 	APIKey string
@@ -46,7 +50,7 @@ func (s *EmailSender) SendVerificationEmail(toEmail, link string) error {
 	req.Header.Set("x-api-key", s.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -89,7 +93,7 @@ func (s *EmailSender) SendSeatOpenedEmail(toEmail, subject, catalogNbr, section,
 	req.Header.Set("x-api-key", s.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}

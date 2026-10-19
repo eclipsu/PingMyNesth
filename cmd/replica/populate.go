@@ -24,7 +24,7 @@ func cmdPopulate(subject, catalogNbr string) {
 	warmupResp.Body.Close()
 
 	url := fmt.Sprintf(
-		"https://soar.usm.edu/psc/guest/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_ClassSearch?institution=USM01&term=4271&subject=%s&catalog_nbr=%s&campus=HBG&x_acad_career=UGRD&enrl_stat=O&crse_attr=&crse_attr_value=&session_code=1&page=1",
+		"https://soar.usm.edu/psc/guest/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_ClassSearch?institution=USM01&term=4271&subject=%s&catalog_nbr=%s&campus=HBG&x_acad_career=UGRD&enrl_stat=&crse_attr=&crse_attr_value=&session_code=1&page=1",
 		subject, catalogNbr,
 	)
 

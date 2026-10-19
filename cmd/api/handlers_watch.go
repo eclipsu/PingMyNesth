@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -11,8 +10,7 @@ import (
 )
 
 type watchRequest struct {
-	Email    string `json:"email"`
-	ClassNbr int32  `json:"class_nbr"`
+	ClassNbr int32 `json:"class_nbr"`
 }
 
 func watchHandler(queries *db.Queries) http.HandlerFunc {
@@ -28,9 +26,13 @@ func watchHandler(queries *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		email := strings.TrimSpace(strings.ToLower(req.Email))
-		if email == "" || req.ClassNbr == 0 {
-			writeError(w, http.StatusBadRequest, "email and class_nbr are required")
+		email := emailFromContext(r) // set by authMiddleware, not client-supplied
+		if email == "" {
+			writeError(w, http.StatusUnauthorized, "not authenticated")
+			return
+		}
+		if req.ClassNbr == 0 {
+			writeError(w, http.StatusBadRequest, "class_nbr is required")
 			return
 		}
 
@@ -44,11 +46,8 @@ func watchHandler(queries *db.Queries) http.HandlerFunc {
 
 		user, err := queries.GetUserByEmail(ctx, email)
 		if err != nil {
-			user, err = queries.CreateUser(ctx, email)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, "error creating user")
-				return
-			}
+			writeError(w, http.StatusUnauthorized, "user not found")
+			return
 		}
 
 		_, err = queries.CreateWatch(ctx, db.CreateWatchParams{
@@ -60,6 +59,6 @@ func watchHandler(queries *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		writeJSON(w, http.StatusCreated, map[string]string{"message": "watch created, verify your email to receive notifications"})
+		writeJSON(w, http.StatusCreated, map[string]string{"message": "watch created"})
 	}
 }

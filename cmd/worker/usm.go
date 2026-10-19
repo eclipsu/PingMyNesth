@@ -102,9 +102,8 @@ func fetchClassSearch(ctx context.Context, client *http.Client, cfg config, limi
 	q.Set("institution", "USM01")
 	q.Set("term", term)
 	q.Set("subject", subject)
-	q.Set("campus", "HBG")
-	q.Set("x_acad_career", "UGRD")
-	q.Set("enrl_stat", "O")
+	// no campus/career/enrl_stat filters: watches can be on any campus, and
+	// enrl_stat=O drops full sections, so a 0 -> open flip would never be seen
 	q.Set("session_code", "1")
 	q.Set("page", strconv.Itoa(page))
 	u.RawQuery = q.Encode()

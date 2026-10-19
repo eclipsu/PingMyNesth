@@ -36,10 +36,11 @@ func main() {
 	mux.HandleFunc("/signup", signupHandler(queries, sender))
 	mux.HandleFunc("/verify", verifyHandler(queries, jwtSecret))
 	mux.HandleFunc("/search", searchHandler(queries))
-	mux.HandleFunc("/watch", watchHandler(queries))
+	mux.HandleFunc("/watch", authMiddleware(jwtSecret, watchHandler(queries)))
 	mux.HandleFunc("/watches", authMiddleware(jwtSecret, listWatchesHandler(queries)))
 	mux.HandleFunc("/watch/delete", authMiddleware(jwtSecret, deleteWatchHandler(queries)))
 	mux.HandleFunc("/me", authMiddleware(jwtSecret, meHandler(queries)))
+	mux.HandleFunc("/logout", logoutHandler)
 
 	handler := throttleMiddleware(50, rateLimitMiddleware(limiterStore, mux))
 
@@ -49,6 +50,19 @@ func main() {
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// logoutHandler exists so the frontend has something to call; sessions are
+// stateless JWTs, so the client dropping its token is what actually logs out.
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
+}
+
+func getEnvOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
 
 func mustGetEnv(key string) string {

@@ -21,6 +21,15 @@ type apiClassSection struct {
 	EnrollmentAvail int    `json:"enrollment_available"`
 	ClassCapacity   int    `json:"class_capacity"`
 	EnrlStatDescr   string `json:"enrl_stat_descr"`
+
+	Campus          string `json:"campus,omitempty"`
+	AcadCareer      string `json:"acad_career,omitempty"`
+	SessionCode     string `json:"session_code,omitempty"`
+	Days            string `json:"days,omitempty"`
+	StartTime       string `json:"start_time,omitempty"`
+	EndTime         string `json:"end_time,omitempty"`
+	InstructorLast  string `json:"instructor_name,omitempty"`
+	InstructorFirst string `json:"instr_first_name,omitempty"`
 }
 
 type apiClassSearchResponse struct {
@@ -28,10 +37,14 @@ type apiClassSearchResponse struct {
 	Classes   []apiClassSection `json:"classes"`
 }
 
+// searchHandler proxies to the mock server in development, or the real USM
+// endpoint in production, exposing every filter param USM's Class Search
+// endpoint is known to support (see docs/usm-api-reference.md). Only
+// `subject` is required; everything else narrows the result set further.
 func searchHandler(queries *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		subject := r.URL.Query().Get("subject")
-		catalogNbr := r.URL.Query().Get("catalog_nbr")
+		q := r.URL.Query()
+		subject := q.Get("subject")
 
 		if subject == "" {
 			writeError(w, http.StatusBadRequest, "subject is required")
@@ -56,21 +69,47 @@ func searchHandler(queries *db.Queries) http.HandlerFunc {
 			writeError(w, http.StatusInternalServerError, "internal error building request")
 			return
 		}
-		q := u.Query()
-		q.Set("subject", subject)
-		if catalogNbr != "" {
-			q.Set("catalog_nbr", catalogNbr)
+
+		upstream := u.Query()
+		upstream.Set("subject", subject)
+
+		// pass through every optional filter USM's real endpoint supports,
+		// only if the client actually provided it
+		passthroughParams := []string{
+			"catalog_nbr",
+			"campus",
+			"x_acad_career",
+			"session_code",
+			"days",
+			"start_time_ge",
+			"end_time_le",
+			"instructor_name",
+			"instr_first_name",
+			"crse_attr",
+			"crse_attr_value",
 		}
+		for _, p := range passthroughParams {
+			if v := q.Get(p); v != "" {
+				upstream.Set(p, v)
+			}
+		}
+
 		if !development {
-			q.Set("institution", "USM01")
-			q.Set("term", "4271")
-			q.Set("campus", "HBG")
-			q.Set("x_acad_career", "UGRD")
-			q.Set("enrl_stat", "O")
-			q.Set("session_code", "1")
-			q.Set("page", "1")
+			// required constants for the real USM endpoint that we don't
+			// expose as client-controllable params
+			upstream.Set("institution", "USM01")
+			if upstream.Get("term") == "" {
+				upstream.Set("term", getEnvOrDefault("TERM_CODE", "4271"))
+			}
+			// no enrl_stat filter: "O" hides full sections, and full sections
+			// are exactly the ones people want to watch
+			if upstream.Get("session_code") == "" {
+				upstream.Set("session_code", "1")
+			}
+			upstream.Set("page", "1")
 		}
-		u.RawQuery = q.Encode()
+
+		u.RawQuery = upstream.Encode()
 
 		resp, err := http.Get(u.String())
 		if err != nil {
@@ -85,8 +124,12 @@ func searchHandler(queries *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		ctx := r.Context()
-		for _, c := range result.Classes {
+	if result.Classes == nil {
+		result.Classes = []apiClassSection{}
+	}
+
+	ctx := r.Context()
+	for _, c := range result.Classes {
 			_ = queries.UpsertSection(ctx, db.UpsertSectionParams{
 				ClassNbr:            int32(c.ClassNbr),
 				Subject:             c.Subject,

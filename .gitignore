@@ -32,3 +32,6 @@ docker-compose.override.yml
 tmp/
 cmd/api/api
 /api
+
+# third-party PDFs kept locally for reference, not redistributable
+frontend/assets/*.pdf

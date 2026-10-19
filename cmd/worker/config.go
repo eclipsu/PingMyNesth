@@ -12,6 +12,7 @@ type config struct {
 	Development  bool
 	Port         string
 	EhulakAPIKey string
+	Term         string
 }
 
 func loadConfig() config {
@@ -24,6 +25,7 @@ func loadConfig() config {
 		Development:  os.Getenv("DEVELOPMENT") == "true",
 		Port:         getEnvOrDefault("PORT", "8081"),
 		EhulakAPIKey: mustGetEnv("EHULAK_API_KEY"),
+		Term:         getEnvOrDefault("TERM_CODE", "4271"),
 	}
 }
 

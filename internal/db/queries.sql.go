@@ -44,7 +44,9 @@ func (q *Queries) CreateVerificationToken(ctx context.Context, arg CreateVerific
 }
 
 const createWatch = `-- name: CreateWatch :one
-INSERT INTO watches (user_id, class_nbr) VALUES ($1, $2) RETURNING id, user_id, class_nbr, active, created_at
+INSERT INTO watches (user_id, class_nbr) VALUES ($1, $2)
+ON CONFLICT (user_id, class_nbr) DO UPDATE SET active = true
+RETURNING id, user_id, class_nbr, active, created_at
 `
 
 type CreateWatchParams struct {

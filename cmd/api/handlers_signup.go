@@ -73,7 +73,8 @@ func signupHandler(queries *db.Queries, sender *notify.EmailSender) http.Handler
 
 func sendVerificationEmail(sender *notify.EmailSender, email, token string) error {
 	// reuses the same EmailSender but with a distinct subject/body for verification
-	link := "http://localhost:3000/verify?token=" + token // TODO: swap for real deployed frontend URL
+	frontendURL := strings.TrimRight(getEnvOrDefault("FRONTEND_URL", "http://localhost:3000"), "/")
+	link := frontendURL + "/verify?token=" + token
 	return sender.SendVerificationEmail(email, link)
 }
 

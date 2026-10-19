@@ -30,12 +30,19 @@ func runCycle(ctx context.Context, client *http.Client, cfg config, limiter *rat
 	}
 
 	for _, subj := range subjects {
-		result, err := fetchClassSearch(ctx, client, cfg, limiter, subj, "4271", 1)
-		if err != nil {
-			log.Println("error polling", subj, ":", err)
-			continue
+		// big subjects span several pages; walk all of them so sections
+		// past page 1 still get checked
+		for page := 1; ; page++ {
+			result, err := fetchClassSearch(ctx, client, cfg, limiter, subj, cfg.Term, page)
+			if err != nil {
+				log.Println("error polling", subj, "page", page, ":", err)
+				break
+			}
+			checkForOpenings(ctx, queries, sender, result.Classes)
+			if page >= result.PageCount {
+				break
+			}
 		}
-		checkForOpenings(ctx, queries, sender, result.Classes)
 	}
 	fmt.Println("--- cycle complete ---")
 }
