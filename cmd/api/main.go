@@ -59,7 +59,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/signup", signupHandler(queries, sender))
+	mux.HandleFunc("/signup", signupHandler(queries, sender, newSignupGuard()))
 	mux.HandleFunc("/verify", verifyHandler(queries, sessions))
 	mux.HandleFunc("/refresh", refreshHandler(queries, sessions))
 	mux.HandleFunc("/search", searchHandler(queries, courses, newUSMClient()))

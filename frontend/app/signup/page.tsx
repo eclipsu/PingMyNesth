@@ -1,18 +1,70 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { MailCheck } from "lucide-react";
 import { AuthShell } from "@/components/AuthShell";
 import { usePingApi } from "@/hooks/usePingApi";
+import { ApiError } from "@/lib/api";
 
 // Mirrors isUSMEmail in cmd/api/handlers_signup.go
 const USM_EMAIL = /^[a-z0-9._-]+@usm\.edu$/i;
+
+// Mirrors cmd/api/signup_guard.go: 30s between emails, 3 resends, then the
+// server locks sign-in emails for this IP for 30 minutes.
+const RESEND_COOLDOWN = 30;
+const MAX_RESENDS = 3;
+
+/** Seconds to wait from a refused send (the API sends retry_after). */
+function retryAfter(err: unknown): number | null {
+  if (!(err instanceof ApiError) || (err.status !== 429 && err.status !== 403)) return null;
+  const body = err.body as { retry_after?: unknown } | null;
+  return typeof body?.retry_after === "number" ? body.retry_after : RESEND_COOLDOWN;
+}
+
+function clock(secs: number) {
+  const m = Math.floor(secs / 60);
+  const s = String(secs % 60).padStart(2, "0");
+  return m ? `${m}:${s}` : `${secs}s`;
+}
 
 export default function SignupPage() {
   const { signup, busy, error, clearError } = usePingApi();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const [resendsLeft, setResendsLeft] = useState(MAX_RESENDS);
+  const [locked, setLocked] = useState(false); // the server banned this IP for a while
+  const [resendNote, setResendNote] = useState<string | null>(null);
+
+  // tick the countdown once a second while it's running
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = window.setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [cooldown]);
+
+  // a refused send: show the server's wait, and remember a ban
+  const handleRefusal = (err: unknown) => {
+    const wait = retryAfter(err);
+    if (wait == null) return false;
+    setCooldown(wait);
+    setLocked(err instanceof ApiError && err.status === 403);
+    return true;
+  };
+
+  const resend = async () => {
+    clearError();
+    setResendNote(null);
+    try {
+      await signup(email);
+      setResendsLeft((n) => n - 1);
+      setCooldown(RESEND_COOLDOWN);
+      setResendNote("Sent again. It can take a minute to arrive.");
+    } catch (err) {
+      handleRefusal(err);
+    }
+  };
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -25,8 +77,11 @@ export default function SignupPage() {
     try {
       await signup(email);
       setSent(true);
-    } catch {
-      /* error surfaced on hook */
+      setCooldown(RESEND_COOLDOWN);
+      setResendsLeft(MAX_RESENDS);
+      setResendNote(null);
+    } catch (err) {
+      handleRefusal(err); /* message surfaced on the hook */
     }
   };
 
@@ -42,10 +97,47 @@ export default function SignupPage() {
             We sent a sign-in link to <span className="font-medium text-ink">{email}</span>. Open
             it on this device to start watching classes.
           </p>
+          <p className="mt-5 border-l-4 border-accent pl-4 text-left text-sm leading-relaxed text-ink-2">
+            Don&apos;t see it? <strong>Check your Junk or Spam folder.</strong> USM&apos;s mail
+            filter can be strict with new senders. Mark it &quot;Not junk&quot; so seat alerts
+            land in your inbox too.
+          </p>
+
+          <div className="mt-6" aria-live="polite">
+            {locked ? (
+              <p className="text-sm text-full">
+                Too many sign-in emails. Try again in {clock(cooldown)}.
+              </p>
+            ) : resendsLeft > 0 ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void resend()}
+                  disabled={busy || cooldown > 0}
+                  className="btn btn-secondary w-full"
+                >
+                  {busy ? "Sending…" : cooldown > 0 ? `Resend link in ${clock(cooldown)}` : "Resend link"}
+                </button>
+                <p className="mt-2 text-xs text-muted">
+                  {resendNote ?? `${resendsLeft} resend${resendsLeft === 1 ? "" : "s"} left.`}
+                  {resendNote ? ` ${resendsLeft} left.` : ""}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-ink-2">
+                No resends left. Wait 30 minutes before requesting another link.
+              </p>
+            )}
+            {error && !locked ? <p className="mt-2 text-sm text-full" role="alert">{error}</p> : null}
+          </div>
+
           <button
             type="button"
-            onClick={() => setSent(false)}
-            className="btn btn-ghost btn-sm mt-5"
+            onClick={() => {
+              setSent(false);
+              clearError();
+            }}
+            className="btn btn-ghost btn-sm mt-4"
           >
             Use a different email
           </button>
@@ -82,10 +174,14 @@ export default function SignupPage() {
             </label>
             {error ? (
               <p className="rounded-lg bg-full-soft px-3 py-2 text-sm text-full" role="alert">
-                {error}
+                {cooldown > 0
+                  ? locked
+                    ? `Too many sign-in emails. Try again in ${clock(cooldown)}.`
+                    : `Wait ${clock(cooldown)} before requesting another link.`
+                  : error}
               </p>
             ) : null}
-            <button type="submit" disabled={busy} className="btn btn-accent w-full">
+            <button type="submit" disabled={busy || (locked && cooldown > 0)} className="btn btn-accent w-full">
               {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>

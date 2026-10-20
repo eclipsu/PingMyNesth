@@ -19,7 +19,7 @@ type signupRequest struct {
 	Email string `json:"email"`
 }
 
-func signupHandler(queries *db.Queries, sender *notify.EmailSender) http.HandlerFunc {
+func signupHandler(queries *db.Queries, sender *notify.EmailSender, guard *signupGuard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -35,6 +35,11 @@ func signupHandler(queries *db.Queries, sender *notify.EmailSender) http.Handler
 		email := strings.TrimSpace(strings.ToLower(req.Email))
 		if !isUSMEmail(email) {
 			http.Error(w, "use your @usm.edu email", http.StatusBadRequest)
+			return
+		}
+
+		if ok, status, msg, wait := guard.allow(getClientIP(r), email); !ok {
+			writeRetry(w, status, msg, wait)
 			return
 		}
 
