@@ -1,6 +1,7 @@
-replica
+# built binaries at the repo root only (a bare name also matched cmd/replica/)
+/replica
 cmd/replica/replica
-worker
+/worker
 *.exe
 *.exe~
 *.dll
