@@ -1,18 +1,27 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useState } from "react";
-import { BrandLogo } from "@/components/landing/BrandLogo";
+import { MailCheck } from "lucide-react";
+import { AuthShell } from "@/components/AuthShell";
 import { usePingApi } from "@/hooks/usePingApi";
+
+// Mirrors isUSMEmail in cmd/api/handlers_signup.go
+const USM_EMAIL = /^[a-z0-9._-]+@usm\.edu$/i;
 
 export default function SignupPage() {
   const { signup, busy, error, clearError } = usePingApi();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     clearError();
+    if (!USM_EMAIL.test(email.trim())) {
+      setEmailError("Use your @usm.edu email.");
+      return;
+    }
+    setEmailError(null);
     try {
       await signup(email);
       setSent(true);
@@ -22,61 +31,66 @@ export default function SignupPage() {
   };
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-ink px-6 py-16 text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[url('/images/usm-campus.jpg')] bg-cover bg-center opacity-30" />
-      <div className="absolute inset-0 bg-gradient-to-b from-black via-black/90 to-black" />
+    <AuthShell>
+      {sent ? (
+        <div className="text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-open-soft text-open">
+            <MailCheck className="h-6 w-6" aria-hidden />
+          </span>
+          <h1 className="mt-5 text-4xl font-bold text-ink">Check your inbox</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted">
+            We sent a sign-in link to <span className="font-medium text-ink">{email}</span>. Open
+            it on this device to start watching classes.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSent(false)}
+            className="btn btn-ghost btn-sm mt-5"
+          >
+            Use a different email
+          </button>
+        </div>
+      ) : (
+        <>
+          <h1 className="text-4xl font-bold text-ink">Sign in</h1>
 
-      <div className="relative w-full max-w-lg border border-white/10 bg-surface p-8 sm:p-10">
-        <BrandLogo className="h-12 w-12" />
-        <h1 className="mt-6 text-3xl font-semibold tracking-tight text-white">
-          Start watching classes
-        </h1>
-        <p className="mt-3 text-white/60">
-          We&apos;ll email you a magic link. No password — just your USM email.
-        </p>
-
-        {sent ? (
-          <div className="mt-8 border border-success/30 bg-success/10 p-5">
-            <p className="text-sm font-semibold text-white">Check your email</p>
-            <p className="mt-1 text-sm text-white/65">
-              We sent a verification link to{" "}
-              <span className="font-medium text-gold">{email}</span>.
-            </p>
-          </div>
-        ) : (
-          <form className="mt-8 space-y-3" onSubmit={onSubmit}>
-            <label htmlFor="email" className="block text-sm font-medium text-white">
-              USM email
+          <form className="mt-7 space-y-4" onSubmit={onSubmit}>
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-ink">Email</span>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                required
+                autoFocus
+                autoComplete="email"
+                placeholder="you@usm.edu"
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setEmailError(null);
+                }}
+                aria-invalid={emailError ? true : undefined}
+                aria-describedby={emailError ? "email-error" : undefined}
+                className="input"
+              />
+              {emailError ? (
+                <span id="email-error" className="mt-2 block text-sm text-full">
+                  {emailError}
+                </span>
+              ) : null}
             </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@usm.edu"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-white/15 bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-white/35 focus:border-gold"
-            />
             {error ? (
-              <p className="text-sm text-danger" role="alert">
+              <p className="rounded-lg bg-full-soft px-3 py-2 text-sm text-full" role="alert">
                 {error}
               </p>
             ) : null}
-            <button type="submit" disabled={busy} className="btn btn-gold w-full disabled:opacity-60">
-              {busy ? "Sending…" : "Continue with USM Email"}
+            <button type="submit" disabled={busy} className="btn btn-accent w-full">
+              {busy ? "Signing in…" : "Sign in"}
             </button>
           </form>
-        )}
-
-        <Link
-          href="/"
-          className="mt-6 block text-center text-sm font-medium text-white/50 hover:text-gold"
-        >
-          Home
-        </Link>
-      </div>
-    </main>
+        </>
+      )}
+    </AuthShell>
   );
 }

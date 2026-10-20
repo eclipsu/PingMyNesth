@@ -1,47 +1,30 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/oscusm/PingMyNest/internal/catalog"
 	db "github.com/oscusm/PingMyNest/internal/db"
+	"github.com/oscusm/PingMyNest/internal/usm"
 )
 
-type apiClassSection struct {
-	ClassNbr        int    `json:"class_nbr"`
-	Subject         string `json:"subject"`
-	CatalogNbr      string `json:"catalog_nbr"`
-	ClassSection    string `json:"class_section"`
-	Descr           string `json:"descr"`
-	Strm            string `json:"strm"`
-	EnrollmentAvail int    `json:"enrollment_available"`
-	ClassCapacity   int    `json:"class_capacity"`
-	EnrlStatDescr   string `json:"enrl_stat_descr"`
-
-	Campus          string `json:"campus,omitempty"`
-	AcadCareer      string `json:"acad_career,omitempty"`
-	SessionCode     string `json:"session_code,omitempty"`
-	Days            string `json:"days,omitempty"`
-	StartTime       string `json:"start_time,omitempty"`
-	EndTime         string `json:"end_time,omitempty"`
-	InstructorLast  string `json:"instructor_name,omitempty"`
-	InstructorFirst string `json:"instr_first_name,omitempty"`
-}
-
-type apiClassSearchResponse struct {
-	PageCount int               `json:"pageCount"`
-	Classes   []apiClassSection `json:"classes"`
-}
-
 // searchHandler proxies to the mock server in development, or the real USM
-// endpoint in production, exposing every filter param USM's Class Search
-// endpoint is known to support (see docs/usm-api-reference.md). Only
+// endpoint in production (through usmClient, which keeps the guest session
+// and caches), exposing every filter param USM's Class Search endpoint is
+// known to support. Only
 // `subject` is required; everything else narrows the result set further.
-func searchHandler(queries *db.Queries) http.HandlerFunc {
+const maxSearchPages = 5
+
+func searchHandler(queries *db.Queries, courses *catalog.Catalog, usmClient *usm.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		subject := q.Get("subject")
@@ -52,25 +35,7 @@ func searchHandler(queries *db.Queries) http.HandlerFunc {
 		}
 
 		development := os.Getenv("DEVELOPMENT") == "true"
-		port := os.Getenv("PORT")
-		if port == "" {
-			port = "8081"
-		}
-
-		var baseURL string
-		if development {
-			baseURL = "http://localhost:" + port + "/mock-class-search"
-		} else {
-			baseURL = "https://soar.usm.edu/psc/guest/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_ClassSearch"
-		}
-
-		u, err := url.Parse(baseURL)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "internal error building request")
-			return
-		}
-
-		upstream := u.Query()
+		upstream := url.Values{}
 		upstream.Set("subject", subject)
 
 		// pass through every optional filter USM's real endpoint supports,
@@ -98,38 +63,36 @@ func searchHandler(queries *db.Queries) http.HandlerFunc {
 			// required constants for the real USM endpoint that we don't
 			// expose as client-controllable params
 			upstream.Set("institution", "USM01")
-			if upstream.Get("term") == "" {
-				upstream.Set("term", getEnvOrDefault("TERM_CODE", "4271"))
-			}
+			upstream.Set("term", getEnvOrDefault("TERM_CODE", "4271"))
 			// no enrl_stat filter: "O" hides full sections, and full sections
 			// are exactly the ones people want to watch
 			if upstream.Get("session_code") == "" {
 				upstream.Set("session_code", "1")
 			}
-			upstream.Set("page", "1")
 		}
 
-		u.RawQuery = upstream.Encode()
-
-		resp, err := http.Get(u.String())
-		if err != nil {
-			writeError(w, http.StatusBadGateway, "error reaching class search source")
-			return
+		// subject-wide searches can span pages (100 sections each)
+		result := usm.ClassSearchResponse{PageCount: 1, Classes: []usm.ClassSection{}}
+		for page := 1; page <= maxSearchPages; page++ {
+			upstream.Set("page", strconv.Itoa(page))
+			res, err := usmClient.Search(r.Context(), upstream)
+			if err != nil {
+				log.Printf("search %s: %v", upstream.Encode(), err)
+				writeError(w, http.StatusBadGateway, "class search is unavailable right now")
+				return
+			}
+			for _, s := range res.Classes {
+				result.Classes = append(result.Classes, s.Flatten())
+			}
+			if page >= res.PageCount {
+				break
+			}
 		}
-		defer resp.Body.Close()
 
-		var result apiClassSearchResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			writeError(w, http.StatusBadGateway, "upstream returned invalid data")
-			return
-		}
-
-	if result.Classes == nil {
-		result.Classes = []apiClassSection{}
-	}
-
-	ctx := r.Context()
-	for _, c := range result.Classes {
+		ctx := r.Context()
+		for _, c := range result.Classes {
+			courses.Add(catalog.Course{Subject: c.Subject, CatalogNbr: c.CatalogNbr, Title: c.Descr})
+			courses.AddInstructor(c.InstructorFirst, c.InstructorLast, c.Subject)
 			_ = queries.UpsertSection(ctx, db.UpsertSectionParams{
 				ClassNbr:            int32(c.ClassNbr),
 				Subject:             c.Subject,
@@ -142,5 +105,30 @@ func searchHandler(queries *db.Queries) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, result)
+	}
+}
+
+// coursesHandler serves the autocomplete catalog. The browser builds a trie
+// from it once, so typing never hits the API (or the per-IP rate limit).
+// The catalog grows as searches run, so browsers revalidate every load with
+// an ETag and get a body-less 304 when nothing changed.
+func coursesHandler(courses *catalog.Catalog) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := json.Marshal(courses.Snapshot())
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "error building catalog")
+			return
+		}
+		sum := sha256.Sum256(body)
+		etag := `"` + hex.EncodeToString(sum[:8]) + `"`
+
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
 	}
 }

@@ -10,10 +10,8 @@ export type MessageResponse = {
   message: string;
 };
 
-/** Returned by /verify — cookie is primary; token kept for Bearer fallback. */
-export type VerifyResponse = MessageResponse & {
-  token?: string;
-};
+/** Returned by /verify; the session itself arrives as httpOnly cookies. */
+export type VerifyResponse = MessageResponse;
 
 export type MeResponse = {
   id: number;

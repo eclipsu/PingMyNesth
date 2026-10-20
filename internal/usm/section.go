@@ -1,0 +1,144 @@
+// Package usm models USM's public Class Search responses.
+package usm
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"unicode"
+)
+
+// ClassSection is the flat shape our API and the replica mock expose.
+type ClassSection struct {
+	ClassNbr        int    `json:"class_nbr"`
+	Subject         string `json:"subject"`
+	CatalogNbr      string `json:"catalog_nbr"`
+	ClassSection    string `json:"class_section"`
+	Descr           string `json:"descr"`
+	Strm            string `json:"strm"`
+	EnrollmentAvail int    `json:"enrollment_available"`
+	ClassCapacity   int    `json:"class_capacity"`
+	EnrlStatDescr   string `json:"enrl_stat_descr"`
+
+	Campus          string `json:"campus,omitempty"`
+	AcadCareer      string `json:"acad_career,omitempty"`
+	SessionCode     string `json:"session_code,omitempty"`
+	Days            string `json:"days,omitempty"`
+	StartTime       string `json:"start_time,omitempty"`
+	EndTime         string `json:"end_time,omitempty"`
+	InstructorLast  string `json:"instructor_name,omitempty"`
+	InstructorFirst string `json:"instr_first_name,omitempty"`
+}
+
+type ClassSearchResponse struct {
+	PageCount int            `json:"pageCount"`
+	Classes   []ClassSection `json:"classes"`
+}
+
+// Real USM sections nest schedule and instructor data instead of using the
+// flat fields; Flatten copies them across.
+type Meeting struct {
+	Days      string `json:"days"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+}
+
+type Instructor struct {
+	Name string `json:"name"`
+}
+
+type Section struct {
+	ClassSection
+	Meetings    []Meeting    `json:"meetings"`
+	Instructors []Instructor `json:"instructors"`
+}
+
+type SearchResponse struct {
+	PageCount int       `json:"pageCount"`
+	Classes   []Section `json:"classes"`
+}
+
+// Flatten fills the flat schedule/instructor fields from the first meeting
+// and first instructor. Sections that are already flat pass through as-is.
+func (s Section) Flatten() ClassSection {
+	out := s.ClassSection
+	// some sections list a "TBA" meeting before the real one; use the first
+	// meeting that has a schedule
+	for _, m := range s.Meetings {
+		if m.Days == "" || m.Days == "TBA" {
+			continue
+		}
+		out.Days = daysToLetters(m.Days)
+		out.StartTime = clockTime(m.StartTime)
+		out.EndTime = clockTime(m.EndTime)
+		break
+	}
+	if len(s.Instructors) > 0 {
+		name := strings.TrimSpace(s.Instructors[0].Name)
+		// USM uses "Staff", "-", or "TBA" when nobody is assigned yet
+		if hasLetter(name) && name != "Staff" && name != "TBA" {
+			if i := strings.LastIndex(name, " "); i > 0 {
+				out.InstructorFirst, out.InstructorLast = name[:i], name[i+1:]
+			} else {
+				out.InstructorLast = name
+			}
+		}
+	}
+	return out
+}
+
+func hasLetter(s string) bool {
+	for _, r := range s {
+		if unicode.IsLetter(r) {
+			return true
+		}
+	}
+	return false
+}
+
+// daysToLetters turns USM's "MoWeFr" / "TuTh" into "MWF" / "TR".
+func daysToLetters(days string) string {
+	letters := map[string]string{"Mo": "M", "Tu": "T", "We": "W", "Th": "R", "Fr": "F", "Sa": "S", "Su": "U"}
+	var b strings.Builder
+	for i := 0; i+1 < len(days); i += 2 {
+		b.WriteString(letters[days[i:i+2]])
+	}
+	return b.String()
+}
+
+// clockTime turns "13.00.00.000000" into "1:00 PM".
+func clockTime(t string) string {
+	parts := strings.Split(t, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	h, err1 := strconv.Atoi(parts[0])
+	m, err2 := strconv.Atoi(parts[1])
+	if err1 != nil || err2 != nil {
+		return ""
+	}
+	suffix := "AM"
+	if h >= 12 {
+		suffix = "PM"
+	}
+	if h%12 == 0 {
+		h = 12
+	} else {
+		h %= 12
+	}
+	return fmt.Sprintf("%d:%02d %s", h, m, suffix)
+}
+
+// ClassDetails is the slice of IScript_ClassDetails we use: the free-text
+// enrollment requirements and the catalog description (which usually
+// repeats the prerequisites).
+type ClassDetails struct {
+	SectionInfo struct {
+		EnrollmentInformation struct {
+			EnrollRequirements string `json:"enroll_requirements"`
+		} `json:"enrollment_information"`
+		CatalogDescr struct {
+			Description string `json:"crse_catalog_description"`
+		} `json:"catalog_descr"`
+	} `json:"section_info"`
+}

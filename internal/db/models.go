@@ -8,6 +8,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type RefreshToken struct {
+	ID        int32
+	UserID    int32
+	TokenHash string
+	ExpiresAt pgtype.Timestamptz
+	RevokedAt pgtype.Timestamptz
+	UserAgent pgtype.Text
+	CreatedAt pgtype.Timestamptz
+}
+
 type Section struct {
 	ClassNbr            int32
 	Subject             string
@@ -20,10 +30,11 @@ type Section struct {
 }
 
 type User struct {
-	ID        int32
-	Email     string
-	Verified  pgtype.Bool
-	CreatedAt pgtype.Timestamptz
+	ID           int32
+	Email        string
+	Verified     pgtype.Bool
+	CreatedAt    pgtype.Timestamptz
+	TokenVersion int32
 }
 
 type VerificationToken struct {

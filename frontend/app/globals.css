@@ -1,42 +1,52 @@
 @import "tailwindcss";
 
 :root {
-  --gold: #ffb81c;
-  --gold-soft: #ffd56a;
-  --gold-deep: #c48900;
-  --black: #0a0a0a;
+  /* Southern Miss black & gold on cool neutrals. Gold is a fill (pair with --ink);
+     --accent-ink is the text-safe gold for light surfaces. */
+  --bg: #f3f3f4;
+  --surface: #ffffff;
+  --subtle: #e9e9eb;
   --ink: #0a0a0a;
-  --background: #0a0a0a;
-  --surface: #141414;
-  --surface-2: #1c1c1c;
-  --paper: #fff8e8;
-  --card: #ffffff;
-  --gray: #a3a3a3;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --foreground: #f5f5f5;
-  --radius-btn: 0.75rem;
+  --ink-2: #3f3f46;
+  --muted: #5b5b66;
+  --line: #e4e4e7;
+  --line-strong: #c9c9cf;
+  --accent: #ffc72c;
+  --accent-hover: #f2b705;
+  --accent-ink: #8a6100;
+  --accent-soft: #fff4d1;
+  --open: #15803d;
+  --open-soft: #e8f6ec;
+  --low: #b45309;
+  --low-soft: #fdf3e1;
+  --full: #b91c1c;
+  --full-soft: #fdecec;
 }
 
 @theme inline {
-  --color-gold: var(--gold);
-  --color-gold-soft: var(--gold-soft);
-  --color-gold-deep: var(--gold-deep);
-  --color-ink: var(--ink);
-  --color-background: var(--background);
+  --color-bg: var(--bg);
   --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-paper: var(--paper);
-  --color-card: var(--card);
-  --color-muted: var(--gray);
-  --color-success: var(--success);
-  --color-danger: var(--danger);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-subtle: var(--subtle);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-soft: var(--accent-soft);
+  --color-open: var(--open);
+  --color-open-soft: var(--open-soft);
+  --color-low: var(--low);
+  --color-low-soft: var(--low-soft);
+  --color-full: var(--full);
+  --color-full-soft: var(--full-soft);
+  --font-sans: var(--font-archivo);
+  --font-display: var(--font-archivo);
   --font-mono: var(--font-geist-mono);
-  --radius-btn: 0.75rem;
-  --radius-xl: 1rem;
-  --radius-2xl: 1.25rem;
+  --shadow-card: 0 1px 2px rgb(10 10 10 / 0.05);
+  --shadow-float: 0 1px 2px rgb(10 10 10 / 0.06), 0 16px 40px -12px rgb(10 10 10 / 0.22);
 }
 
 html {
@@ -44,107 +54,217 @@ html {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Condensed uppercase display type for page and section headings */
+h1,
+h2 {
+  font-family: var(--font-archivo), sans-serif;
+  font-stretch: 62%;
+  font-weight: 800;
+  text-transform: uppercase;
+  line-height: 0.92;
+}
+
+.font-display {
+  font-stretch: 62%;
 }
 
 ::selection {
-  background: var(--gold);
-  color: var(--black);
-}
-
-:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 3px;
-}
-
-.grain-overlay {
-  pointer-events: none;
-  position: absolute;
-  inset: 0;
-  opacity: 0.07;
-  background-image: url("/images/grain.png");
-  background-size: 160px 160px;
-  mix-blend-mode: overlay;
-}
-
-/* Squared interactive chrome — no capsules */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-btn);
-  padding: 0.85rem 1.4rem;
-  font-size: 0.9rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-}
-
-.btn:hover {
-  transform: translateY(-1px);
-}
-
-.btn:active {
-  transform: translateY(0);
-}
-
-.btn-gold {
-  background: var(--gold);
-  color: var(--black);
-}
-
-.btn-gold:hover {
-  background: var(--gold-soft);
-}
-
-.btn-ghost {
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: transparent;
-  color: white;
-}
-
-.btn-ghost:hover {
-  border-color: var(--gold);
-  background: rgba(255, 184, 28, 0.12);
-}
-
-.btn-ink {
-  background: var(--black);
-  color: white;
-}
-
-.chip {
-  border-radius: 0.5rem;
-  border: 1px solid rgba(255, 184, 28, 0.35);
-  background: rgba(255, 184, 28, 0.1);
-  padding: 0.4rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--gold-soft);
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.chip:hover {
-  border-color: var(--gold);
-  background: rgba(255, 184, 28, 0.22);
-  color: white;
-}
-
-.section-paper {
-  background: var(--paper);
+  background: var(--accent);
   color: var(--ink);
 }
 
-.section-ink {
-  background: var(--surface);
-  color: white;
+:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 
-.section-gold {
-  background: var(--gold);
-  color: var(--black);
+/*
+ * Brushed gold plate for the hero. Three layers, top to bottom:
+ *   1. horizontal grain: SVG turbulence stretched along x (high y frequency,
+ *      near-zero x frequency) blended as an overlay, which reads as brushing
+ *   2. a soft diagonal light sweep, the "shine"
+ *   3. the gold base, banded so the metal looks curved rather than flat
+ */
+.brushed-gold {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 0.38) 45%, transparent 58%),
+    linear-gradient(180deg, #ffd65a 0%, #ffc72c 38%, #f1b414 72%, #e0a20c 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    inset 0 -1px 0 rgb(120 80 0 / 0.35);
+}
+
+.brushed-gold::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='300'%3E%3Cfilter id='b'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.002 0.85' numOctaves='3' seed='7'/%3E%3CfeColorMatrix values='0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 0 0.5 0 0 0 1.4 -0.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23b)'/%3E%3C/svg%3E");
+  background-size: 600px 300px;
+}
+
+/* Layered so Tailwind utilities can override them */
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 2.75rem;
+    border-radius: 0.25rem;
+    padding: 0 1.15rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .btn:disabled {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  .btn-sm {
+    height: 2.25rem;
+    border-radius: 0.25rem;
+    padding: 0 0.85rem;
+    font-size: 0.8rem;
+  }
+
+  .btn-primary {
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .btn-primary:hover {
+    background: #27272a;
+  }
+
+  .btn-accent {
+    background: var(--accent);
+    color: var(--ink);
+  }
+
+  .btn-accent:hover {
+    background: var(--accent-hover);
+  }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-strong);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--ink);
+  }
+
+  .btn-ghost {
+    color: var(--ink-2);
+  }
+
+  .btn-ghost:hover {
+    background: var(--subtle);
+    color: var(--ink);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 2.25rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    padding: 0 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink-2);
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+
+  .chip:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+
+  .chip[aria-pressed="true"] {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: #fff;
+  }
+
+  .input {
+    width: 100%;
+    height: 2.75rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    padding: 0 0.9rem;
+    font-size: 0.95rem;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .input::placeholder {
+    color: #8b8b95;
+  }
+
+  .input:focus {
+    border-color: var(--ink);
+    box-shadow: 0 0 0 3px rgb(255 199 44 / 0.55);
+  }
+
+  .card {
+    border-radius: 0.375rem;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Small uppercase label with a gold rule in front */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+  }
+
+  .eyebrow::before {
+    content: "";
+    width: 1.5rem;
+    height: 3px;
+    background: var(--accent);
+  }
+
+  /* Gold highlighter behind a word in a heading */
+  .mark {
+    background: var(--accent);
+    color: var(--ink);
+    padding: 0 0.12em;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
 }
 
 @keyframes shimmer {
@@ -157,12 +277,85 @@ body {
 }
 
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(10, 10, 10, 0.06) 25%,
-    rgba(255, 184, 28, 0.18) 50%,
-    rgba(10, 10, 10, 0.06) 75%
-  );
+  background: linear-gradient(90deg, var(--subtle) 25%, #ebe6de 50%, var(--subtle) 75%);
   background-size: 200% 100%;
-  animation: shimmer 1.35s ease-in-out infinite;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes ping-dot {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  80%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.live-dot {
+  position: relative;
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--open);
+}
+
+.live-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: ping-dot 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot::after,
+  .skeleton {
+    animation: none;
+  }
+}
+
+@keyframes expand {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes collapse {
+  from {
+    height: var(--radix-accordion-content-height);
+    opacity: 1;
+  }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
 }

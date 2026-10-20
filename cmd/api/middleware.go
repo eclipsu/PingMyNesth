@@ -3,80 +3,125 @@ package main
 import (
 	"net"
 	"net/http"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
 )
 
-// ---------- per-IP rate limiter ----------
+// ---------- per-IP rate limiting, lockout, and ban ----------
+//
+// Every IP gets one token bucket per route class. Running a bucket dry locks
+// that IP out for lockDuration (429 + Retry-After). Getting locked out
+// banThreshold times within banWindow bans the IP for banDuration (403).
 
-type ipLimiter struct {
-	limiter     *rate.Limiter
+const (
+	lockDuration = 1 * time.Minute
+	banThreshold = 5
+	banWindow    = 15 * time.Minute
+	banDuration  = 15 * time.Minute
+)
+
+type limitClass struct {
+	every time.Duration // one token refills per `every`
+	burst int
+}
+
+// Expensive or abusable routes get tight buckets; cheap reads get roomy ones
+// so normal browsing (several API calls per page) never trips them.
+var (
+	authClass    = limitClass{every: 10 * time.Second, burst: 6}        // signup, verify, refresh, logout
+	searchClass  = limitClass{every: 2 * time.Second, burst: 20}        // ~30/min; each hits USM
+	generalClass = limitClass{every: 500 * time.Millisecond, burst: 60} // ~120/min
+)
+
+func classFor(path string) (string, limitClass) {
+	switch path {
+	case "/signup", "/verify", "/refresh", "/logout":
+		return "auth", authClass
+	case "/search":
+		return "search", searchClass
+	default:
+		return "general", generalClass
+	}
+}
+
+type ipState struct {
+	buckets     map[string]*rate.Limiter
 	lastSeen    time.Time
-	violations  int
+	lockedUntil time.Time
 	bannedUntil time.Time
+	lockouts    []time.Time // lockouts inside the current banWindow
 }
 
 type rateLimiterStore struct {
-	mu       sync.Mutex
-	limiters map[string]*ipLimiter
+	mu  sync.Mutex
+	ips map[string]*ipState
+	now func() time.Time // swappable in tests
 }
 
 func newRateLimiterStore() *rateLimiterStore {
-	s := &rateLimiterStore{limiters: make(map[string]*ipLimiter)}
+	s := &rateLimiterStore{ips: make(map[string]*ipState), now: time.Now}
 	go s.cleanupLoop()
 	return s
 }
 
-// getLimiter returns (or creates) the limiter for an IP.
-// 10 requests/min sustained, burst of 15.
-func (s *rateLimiterStore) getLimiter(ip string) *ipLimiter {
+type verdict int
+
+const (
+	allowed verdict = iota
+	locked
+	banned
+)
+
+// check decides one request and returns how long the client should wait.
+func (s *rateLimiterStore) check(ip, path string) (verdict, time.Duration) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.now()
 
-	entry, exists := s.limiters[ip]
-	if !exists {
-		entry = &ipLimiter{
-			limiter:  rate.NewLimiter(rate.Every(6*time.Second), 15), // ~10/min, burst 15
-			lastSeen: time.Now(),
+	st, ok := s.ips[ip]
+	if !ok {
+		st = &ipState{buckets: map[string]*rate.Limiter{}}
+		s.ips[ip] = st
+	}
+	st.lastSeen = now
+
+	if now.Before(st.bannedUntil) {
+		return banned, st.bannedUntil.Sub(now)
+	}
+	if now.Before(st.lockedUntil) {
+		return locked, st.lockedUntil.Sub(now)
+	}
+
+	name, class := classFor(path)
+	bucket, ok := st.buckets[name]
+	if !ok {
+		bucket = rate.NewLimiter(rate.Every(class.every), class.burst)
+		st.buckets[name] = bucket
+	}
+	if bucket.AllowN(now, 1) {
+		return allowed, 0
+	}
+
+	// bucket ran dry: lock out, and escalate to a ban on repeat offenses
+	recent := st.lockouts[:0]
+	for _, t := range st.lockouts {
+		if now.Sub(t) < banWindow {
+			recent = append(recent, t)
 		}
-		s.limiters[ip] = entry
 	}
-	entry.lastSeen = time.Now()
-	return entry
-}
-
-// recordViolation tracks repeated rate-limit hits and escalates to a temporary ban
-// after too many violations in a short period.
-func (s *rateLimiterStore) recordViolation(ip string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	entry, exists := s.limiters[ip]
-	if !exists {
-		return
+	st.lockouts = append(recent, now)
+	if len(st.lockouts) >= banThreshold {
+		st.bannedUntil = now.Add(banDuration)
+		st.lockouts = nil
+		return banned, banDuration
 	}
-	entry.violations++
-
-	const maxViolationsBeforeBan = 5
-	const banDuration = 1 * time.Hour
-
-	if entry.violations >= maxViolationsBeforeBan {
-		entry.bannedUntil = time.Now().Add(banDuration)
-		entry.violations = 0 // reset counter after banning
-	}
-}
-
-func (s *rateLimiterStore) isBanned(ip string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	entry, exists := s.limiters[ip]
-	if !exists {
-		return false
-	}
-	return time.Now().Before(entry.bannedUntil)
+	st.lockedUntil = now.Add(lockDuration)
+	return locked, lockDuration
 }
 
 // cleanupLoop evicts IPs that haven't been seen in a while, so the map
@@ -85,9 +130,10 @@ func (s *rateLimiterStore) cleanupLoop() {
 	ticker := time.NewTicker(10 * time.Minute)
 	for range ticker.C {
 		s.mu.Lock()
-		for ip, entry := range s.limiters {
-			if time.Since(entry.lastSeen) > 30*time.Minute && time.Now().After(entry.bannedUntil) {
-				delete(s.limiters, ip)
+		now := s.now()
+		for ip, st := range s.ips {
+			if now.Sub(st.lastSeen) > 30*time.Minute && now.After(st.bannedUntil) {
+				delete(s.ips, ip)
 			}
 		}
 		s.mu.Unlock()
@@ -96,11 +142,21 @@ func (s *rateLimiterStore) cleanupLoop() {
 
 // ---------- middleware ----------
 
+// trustedProxyHops is how many reverse proxies sit in front of the API
+// (TRUSTED_PROXY_HOPS). X-Forwarded-For is client-controlled except for the
+// entries our own proxies append, so we only read the entry exactly that far
+// from the right. With 0 (the default) the header is ignored entirely;
+// trusting it blindly lets anyone dodge the limiter by faking an IP.
+var trustedProxyHops, _ = strconv.Atoi(os.Getenv("TRUSTED_PROXY_HOPS"))
+
 func getClientIP(r *http.Request) string {
-	// honor X-Forwarded-For if behind a reverse proxy/load balancer,
-	// otherwise fall back to the raw remote address
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		return fwd
+	if trustedProxyHops > 0 {
+		parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+		if i := len(parts) - trustedProxyHops; i >= 0 {
+			if ip := strings.TrimSpace(parts[i]); ip != "" {
+				return ip
+			}
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
@@ -111,21 +167,17 @@ func getClientIP(r *http.Request) string {
 
 func rateLimitMiddleware(store *rateLimiterStore, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ip := getClientIP(r)
-
-		if store.isBanned(ip) {
+		v, wait := store.check(getClientIP(r), r.URL.Path)
+		if v == allowed {
+			next.ServeHTTP(w, r)
+			return
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Round(time.Second).Seconds())))
+		if v == banned {
 			writeError(w, http.StatusForbidden, "too many requests, temporarily banned")
 			return
 		}
-
-		entry := store.getLimiter(ip)
-		if !entry.limiter.Allow() {
-			store.recordViolation(ip)
-			writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
-			return
-		}
-
-		next.ServeHTTP(w, r)
+		writeError(w, http.StatusTooManyRequests, "rate limit exceeded, try again shortly")
 	})
 }
 

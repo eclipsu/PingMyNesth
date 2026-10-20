@@ -70,3 +70,25 @@ WHERE user_id = (SELECT id FROM users WHERE email = $1)
 
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
+-- name: CreateRefreshToken :exec
+INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent)
+VALUES ($1, $2, $3, $4);
+
+-- name: GetRefreshToken :one
+SELECT * FROM refresh_tokens WHERE token_hash = $1;
+
+-- name: RevokeRefreshToken :execrows
+UPDATE refresh_tokens SET revoked_at = now()
+WHERE id = $1 AND revoked_at IS NULL;
+
+-- name: RevokeAllRefreshTokensForUser :exec
+UPDATE refresh_tokens SET revoked_at = now()
+WHERE user_id = $1 AND revoked_at IS NULL;
+
+-- name: BumpTokenVersion :one
+UPDATE users SET token_version = token_version + 1
+WHERE id = $1
+RETURNING token_version;
+
+-- name: DeleteExpiredRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE expires_at < now() - interval '7 days';

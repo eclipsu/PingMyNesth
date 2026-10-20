@@ -11,8 +11,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const bumpTokenVersion = `-- name: BumpTokenVersion :one
+UPDATE users SET token_version = token_version + 1
+WHERE id = $1
+RETURNING token_version
+`
+
+func (q *Queries) BumpTokenVersion(ctx context.Context, id int32) (int32, error) {
+	row := q.db.QueryRow(ctx, bumpTokenVersion, id)
+	var token_version int32
+	err := row.Scan(&token_version)
+	return token_version, err
+}
+
+const createRefreshToken = `-- name: CreateRefreshToken :exec
+INSERT INTO refresh_tokens (user_id, token_hash, expires_at, user_agent)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateRefreshTokenParams struct {
+	UserID    int32
+	TokenHash string
+	ExpiresAt pgtype.Timestamptz
+	UserAgent pgtype.Text
+}
+
+func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error {
+	_, err := q.db.Exec(ctx, createRefreshToken,
+		arg.UserID,
+		arg.TokenHash,
+		arg.ExpiresAt,
+		arg.UserAgent,
+	)
+	return err
+}
+
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email) VALUES ($1) RETURNING id, email, verified, created_at
+INSERT INTO users (email) VALUES ($1) RETURNING id, email, verified, created_at, token_version
 `
 
 func (q *Queries) CreateUser(ctx context.Context, email string) (User, error) {
@@ -23,6 +58,7 @@ func (q *Queries) CreateUser(ctx context.Context, email string) (User, error) {
 		&i.Email,
 		&i.Verified,
 		&i.CreatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -81,6 +117,15 @@ type DeactivateWatchParams struct {
 
 func (q *Queries) DeactivateWatch(ctx context.Context, arg DeactivateWatchParams) error {
 	_, err := q.db.Exec(ctx, deactivateWatch, arg.UserID, arg.ClassNbr)
+	return err
+}
+
+const deleteExpiredRefreshTokens = `-- name: DeleteExpiredRefreshTokens :exec
+DELETE FROM refresh_tokens WHERE expires_at < now() - interval '7 days'
+`
+
+func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deleteExpiredRefreshTokens)
 	return err
 }
 
@@ -162,6 +207,25 @@ func (q *Queries) GetDistinctWatchedSubjects(ctx context.Context) ([]string, err
 	return items, nil
 }
 
+const getRefreshToken = `-- name: GetRefreshToken :one
+SELECT id, user_id, token_hash, expires_at, revoked_at, user_agent, created_at FROM refresh_tokens WHERE token_hash = $1
+`
+
+func (q *Queries) GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error) {
+	row := q.db.QueryRow(ctx, getRefreshToken, tokenHash)
+	var i RefreshToken
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TokenHash,
+		&i.ExpiresAt,
+		&i.RevokedAt,
+		&i.UserAgent,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSectionByClassNbr = `-- name: GetSectionByClassNbr :one
 SELECT class_nbr, subject, catalog_nbr, class_section, descr, term, last_enrollment_avail, updated_at FROM sections WHERE class_nbr = $1
 `
@@ -194,7 +258,7 @@ func (q *Queries) GetSectionLastAvail(ctx context.Context, classNbr int32) (pgty
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, verified, created_at FROM users WHERE email = $1
+SELECT id, email, verified, created_at, token_version FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -205,12 +269,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.Email,
 		&i.Verified,
 		&i.CreatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, verified, created_at FROM users WHERE id = $1
+SELECT id, email, verified, created_at, token_version FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
@@ -221,6 +286,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int32) (User, error) {
 		&i.Email,
 		&i.Verified,
 		&i.CreatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
@@ -301,6 +367,29 @@ UPDATE verification_tokens SET used = true WHERE token = $1
 func (q *Queries) MarkTokenUsed(ctx context.Context, token string) error {
 	_, err := q.db.Exec(ctx, markTokenUsed, token)
 	return err
+}
+
+const revokeAllRefreshTokensForUser = `-- name: RevokeAllRefreshTokensForUser :exec
+UPDATE refresh_tokens SET revoked_at = now()
+WHERE user_id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeAllRefreshTokensForUser(ctx context.Context, userID int32) error {
+	_, err := q.db.Exec(ctx, revokeAllRefreshTokensForUser, userID)
+	return err
+}
+
+const revokeRefreshToken = `-- name: RevokeRefreshToken :execrows
+UPDATE refresh_tokens SET revoked_at = now()
+WHERE id = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeRefreshToken(ctx context.Context, id int32) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeRefreshToken, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const upsertSection = `-- name: UpsertSection :exec

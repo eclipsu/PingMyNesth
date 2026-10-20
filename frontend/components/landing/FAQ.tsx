@@ -1,9 +1,7 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { FadeIn } from "./FadeIn";
+import * as Accordion from "@radix-ui/react-accordion";
+import { Plus } from "lucide-react";
 
 const faqs = [
   {
@@ -12,94 +10,71 @@ const faqs = [
   },
   {
     q: "What email do I use?",
-    a: "Use your USM email. We'll send a magic link so you can verify and start watching classes — no password to remember.",
+    a: "Use your USM email. We'll send a magic link so you can verify and start watching classes. No password to remember.",
   },
   {
     q: "What data do you store?",
-    a: "Only your verified USM email and the class sections you watch. We don't store other personal profile stuff. Seat counts come from USM's public Class Search — we never access your SOAR login. Details are on the Privacy page.",
+    a: "Only your verified USM email and the class sections you watch. Seat counts come from USM's public Class Search; we never access your SOAR login. Details are on the Privacy page.",
   },
   {
     q: "Is Ping My Nest only for USM?",
-    a: "Yes. Ping My Nest is built specifically for University of Southern Mississippi students and course data from SOAR-style registration.",
+    a: "Yes. Ping My Nest is built specifically for University of Southern Mississippi students and USM course data.",
   },
   {
     q: "Is it free?",
-    a: "Yes. Core search, watching, and seat alerts are free for USM students while we grow the nest.",
+    a: "Yes. Search, watching, and seat alerts are free for USM students.",
   },
   {
     q: "How fast are alerts?",
-    a: "Most seat-open alerts land in under two minutes. Timing can vary with registration load, but we watch continuously so you don't have to.",
+    a: "We check watched sections continuously and email you as soon as we see a seat open. Timing depends on how many sections are being watched and on registration load.",
   },
 ];
 
 export function FAQ() {
-  const [open, setOpen] = useState<number | null>(0);
-
   return (
-    <section
-      id="faq"
-      className="section-paper relative scroll-mt-24 py-20 sm:py-24"
-      aria-labelledby="faq-heading"
-    >
-      <div className="mx-auto max-w-[1280px] px-5 sm:px-8">
-        <div className="grid gap-10 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
-          <FadeIn>
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-gold-deep">
-              FAQ
-            </p>
-            <h2
-              id="faq-heading"
-              className="mt-3 text-4xl font-semibold tracking-tight text-ink sm:text-5xl"
+    <section id="faq" className="scroll-mt-20 py-24 sm:py-28" aria-labelledby="faq-heading">
+      <div className="mx-auto grid max-w-6xl gap-12 px-4 sm:px-6 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
+        <div>
+          <p className="eyebrow">FAQ</p>
+          <h2
+            id="faq-heading"
+            className="mt-4 text-5xl font-bold text-ink sm:text-6xl"
+          >
+            Questions, answered.
+          </h2>
+          <p className="mt-4 max-w-sm text-lg leading-relaxed text-muted">
+            Anything else? Open an issue on{" "}
+            <a
+              href="https://github.com/oscusm/PingMyNest"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-accent"
             >
-              Quick answers before you start watching.
-            </h2>
-            <p className="mt-4 max-w-md text-base leading-relaxed text-ink/65">
-              Light on jargon. Built for registration week.
-            </p>
-          </FadeIn>
+              GitHub
+            </a>
+            .
+          </p>
+        </div>
 
-          <FadeIn delay={0.08}>
-            <div className="divide-y divide-black/10 border border-black/10 bg-white">
-              {faqs.map((item, i) => {
-                const isOpen = open === i;
-                return (
-                  <div key={item.q} className="px-5 sm:px-6">
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between gap-4 py-5 text-left"
-                      aria-expanded={isOpen}
-                      onClick={() => setOpen(isOpen ? null : i)}
-                    >
-                      <span className="text-base font-semibold text-ink">
-                        {item.q}
-                      </span>
-                      <ChevronDown
-                        className={`h-5 w-5 shrink-0 text-gold-deep transition-transform ${
-                          isOpen ? "rotate-180" : ""
-                        }`}
-                        aria-hidden
-                      />
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25 }}
-                          className="overflow-hidden"
-                        >
-                          <p className="pb-5 text-sm leading-relaxed text-ink/65">
-                            {item.a}
-                          </p>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
-            </div>
-          </FadeIn>
+        <div>
+          <Accordion.Root type="single" collapsible defaultValue="0" className="border-t border-line">
+            {faqs.map((item, i) => (
+              <Accordion.Item key={item.q} value={String(i)} className="border-b border-line">
+                <Accordion.Header>
+                  <Accordion.Trigger className="group flex w-full items-center justify-between gap-6 py-5 text-left text-[17px] font-semibold text-ink">
+                    {item.q}
+                    <Plus
+                      className="h-5 w-5 shrink-0 text-muted transition-transform duration-200 group-data-[state=open]:rotate-45 group-data-[state=open]:text-accent-ink"
+                      aria-hidden
+                    />
+                  </Accordion.Trigger>
+                </Accordion.Header>
+                <Accordion.Content className="overflow-hidden data-[state=closed]:animate-[collapse_200ms_ease-out] data-[state=open]:animate-[expand_220ms_ease-out]">
+                  <p className="max-w-xl pb-6 text-[15px] leading-relaxed text-muted">{item.a}</p>
+                </Accordion.Content>
+              </Accordion.Item>
+            ))}
+          </Accordion.Root>
         </div>
       </div>
     </section>

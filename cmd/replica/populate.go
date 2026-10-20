@@ -5,57 +5,133 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/oscusm/PingMyNest/internal/usm"
 )
 
-func cmdPopulate(subject, catalogNbr string) {
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Timeout: 10 * time.Second, Jar: jar}
+const usmBase = "https://soar.usm.edu/psc/guest/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula"
+const usmUserAgent = "PingMyNest-replica/0.1 (student project)"
 
-	warmupReq, _ := http.NewRequest("GET", "https://soar.usm.edu/psc/guest/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_Main", nil)
-	warmupReq.Header.Set("User-Agent", "PingMyNest-replica/0.1 (student project)")
-	warmupResp, err := client.Do(warmupReq)
+// requestGap spaces out real USM requests; USM asked us to keep polling minimal.
+const requestGap = 5 * time.Second
+
+type usmClient struct {
+	http *http.Client
+	last time.Time
+}
+
+// newUSMClient warms up a guest session (USM sets cookies on IScript_Main).
+func newUSMClient() *usmClient {
+	jar, _ := cookiejar.New(nil)
+	c := &usmClient{http: &http.Client{Timeout: 15 * time.Second, Jar: jar}}
+	resp, err := c.get(usmBase + ".IScript_Main")
 	if err != nil {
 		fmt.Println("error warming up session:", err)
 		os.Exit(1)
 	}
-	warmupResp.Body.Close()
+	resp.Body.Close()
+	return c
+}
 
-	url := fmt.Sprintf(
-		"https://soar.usm.edu/psc/guest/EMPLOYEE/SA/s/WEBLIB_HCX_CM.H_CLASS_SEARCH.FieldFormula.IScript_ClassSearch?institution=USM01&term=4271&subject=%s&catalog_nbr=%s&campus=HBG&x_acad_career=UGRD&enrl_stat=&crse_attr=&crse_attr_value=&session_code=1&page=1",
-		subject, catalogNbr,
-	)
+func (c *usmClient) get(rawURL string) (*http.Response, error) {
+	if wait := requestGap - time.Since(c.last); !c.last.IsZero() && wait > 0 {
+		time.Sleep(wait)
+	}
+	c.last = time.Now()
+	req, _ := http.NewRequest("GET", rawURL, nil)
+	req.Header.Set("User-Agent", usmUserAgent)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	return c.http.Do(req)
+}
 
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("User-Agent", "PingMyNest-replica/0.1 (student project)")
-
-	resp, err := client.Do(req)
+func (c *usmClient) getJSON(rawURL string, out any) error {
+	resp, err := c.get(rawURL)
 	if err != nil {
-		fmt.Println("error fetching from USM:", err)
-		os.Exit(1)
+		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("non-JSON response (session expired or USM unavailable): %w", err)
+	}
+	return nil
+}
 
-	var result ClassSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		fmt.Println("error decoding USM response (may need session cookie or USM may be unavailable):", err)
+// cmdPopulate saves one course (catalogNbr set) or a whole subject
+// (catalogNbr empty) for every subject given, following pagination.
+func cmdPopulate(subjects []string, catalogNbr string) {
+	c := newUSMClient()
+	failed := 0
+subjects:
+	for _, subject := range subjects {
+		subject = strings.ToUpper(subject)
+		var all []ClassSection
+		for page := 1; ; page++ {
+			q := url.Values{}
+			q.Set("institution", "USM01")
+			q.Set("term", "4271")
+			q.Set("subject", subject)
+			q.Set("catalog_nbr", catalogNbr)
+			q.Set("session_code", "1")
+			q.Set("page", strconv.Itoa(page))
+
+			var result usm.SearchResponse
+			if err := c.getJSON(usmBase+".IScript_ClassSearch?"+q.Encode(), &result); err != nil {
+				// skip this subject; one bad response shouldn't sink a long run
+				fmt.Printf("error fetching %s page %d: %v (skipped)\n", subject, page, err)
+				failed++
+				continue subjects
+			}
+			for _, s := range result.Classes {
+				all = append(all, s.Flatten())
+			}
+			if page >= result.PageCount {
+				break
+			}
+		}
+
+		name := subject + "_" + catalogNbr
+		if catalogNbr == "" {
+			name = subject + "_ALL"
+		}
+		writeJSONFile(filepath.Join(dataDir, name+".json"), ClassSearchResponse{PageCount: 1, Classes: all})
+		fmt.Printf("saved %d section(s) to %s\n", len(all), filepath.Join(dataDir, name+".json"))
+	}
+	if failed > 0 {
+		fmt.Printf("%d subject(s) failed; rerun --populate for just those\n", failed)
 		os.Exit(1)
 	}
+}
 
-	os.MkdirAll(dataDir, 0755)
-	filename := filepath.Join(dataDir, fmt.Sprintf("%s_%s.json", subject, catalogNbr))
-	f, err := os.Create(filename)
+// cmdSubjects saves USM's subject list (code + name) from the options endpoint.
+func cmdSubjects() {
+	c := newUSMClient()
+	var opts usmOptionsResponse
+	if err := c.getJSON(usmBase+".IScript_ClassSearchOptions?institution=USM01&term=4271", &opts); err != nil {
+		fmt.Println("error fetching subjects:", err)
+		os.Exit(1)
+	}
+	writeJSONFile(subjectsFile, opts.Subjects)
+	fmt.Printf("saved %d subject(s) to %s\n", len(opts.Subjects), subjectsFile)
+}
+
+func writeJSONFile(path string, v any) {
+	os.MkdirAll(filepath.Dir(path), 0755)
+	f, err := os.Create(path)
 	if err != nil {
 		fmt.Println("error creating file:", err)
 		os.Exit(1)
 	}
 	defer f.Close()
-
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	enc.Encode(result)
-
-	fmt.Printf("saved %d section(s) to %s\n", len(result.Classes), filename)
+	enc.Encode(v)
 }

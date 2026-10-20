@@ -4,7 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -30,8 +33,8 @@ func signupHandler(queries *db.Queries, sender *notify.EmailSender) http.Handler
 		}
 
 		email := strings.TrimSpace(strings.ToLower(req.Email))
-		if email == "" || !strings.Contains(email, "@") {
-			http.Error(w, "invalid email", http.StatusBadRequest)
+		if !isUSMEmail(email) {
+			http.Error(w, "use your @usm.edu email", http.StatusBadRequest)
 			return
 		}
 
@@ -61,7 +64,16 @@ func signupHandler(queries *db.Queries, sender *notify.EmailSender) http.Handler
 			return
 		}
 
-		if err := sendVerificationEmail(sender, email, token); err != nil {
+		link := verificationLink(token)
+		if err := sender.SendVerificationEmail(email, link); err != nil {
+			log.Printf("signup %s: sending verification email: %v", email, err)
+			// Local dev only: a missing key or flaky provider shouldn't block the
+			// developer. The link goes to the server log, never to the page.
+			if os.Getenv("DEVELOPMENT") == "true" {
+				log.Printf("DEV sign-in link for %s (email not sent): %s", email, link)
+				writeJSON(w, http.StatusOK, map[string]string{"message": "check your email to verify"})
+				return
+			}
 			http.Error(w, "error sending verification email", http.StatusInternalServerError)
 			return
 		}
@@ -71,11 +83,9 @@ func signupHandler(queries *db.Queries, sender *notify.EmailSender) http.Handler
 	}
 }
 
-func sendVerificationEmail(sender *notify.EmailSender, email, token string) error {
-	// reuses the same EmailSender but with a distinct subject/body for verification
+func verificationLink(token string) string {
 	frontendURL := strings.TrimRight(getEnvOrDefault("FRONTEND_URL", "http://localhost:3000"), "/")
-	link := frontendURL + "/verify?token=" + token
-	return sender.SendVerificationEmail(email, link)
+	return frontendURL + "/verify?token=" + token
 }
 
 func generateToken() (string, error) {
@@ -84,4 +94,14 @@ func generateToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+// usmLocalPart is the part before "@usm.edu": letters, digits, dots, dashes,
+// underscores. Exactly one "@" and the exact domain, so "x@evilusm.edu" and
+// "x@usm.edu.evil.com" are rejected.
+var usmLocalPart = regexp.MustCompile(`^[a-z0-9._-]+$`)
+
+func isUSMEmail(email string) bool {
+	local, ok := strings.CutSuffix(email, "@usm.edu")
+	return ok && local != "" && usmLocalPart.MatchString(local)
 }

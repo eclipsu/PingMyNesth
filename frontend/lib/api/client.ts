@@ -1,5 +1,5 @@
+import type { Catalog } from "@/lib/courseIndex";
 import { apiUrl } from "./config";
-import { clearSessionToken, getSessionToken, setSessionToken } from "./session";
 import {
   ApiError,
   type ClassSection,
@@ -18,7 +18,7 @@ type RequestOptions = {
   method?: string;
   body?: unknown;
   query?: Record<string, string | number | undefined | null>;
-  /** Skip Authorization header (public routes). Cookie still sent. */
+  /** On 401, refresh the session once and retry. Off for public/auth routes. */
   auth?: boolean;
   signal?: AbortSignal;
 };
@@ -49,42 +49,68 @@ function errorMessage(status: number, body: unknown): string {
     const err = (body as { error: unknown }).error;
     if (typeof err === "string" && err.trim()) return err;
   }
-  if (status === 429 || status === 403) return "Too many requests — try again in a minute";
+  if (status === 429 || status === 403) return "Too many requests. Try again in a minute.";
   if (status === 401) return "Please sign in again";
   return `Request failed (${status})`;
 }
 
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, query, auth = true, signal } = options;
+/*
+ * Sessions live in httpOnly cookies set by the API (a 15-minute access token
+ * and a rotating 30-day refresh token), so no token is ever readable here.
+ * Every request carries the CSRF header the API requires on writes.
+ */
+function send(path: string, options: RequestOptions): Promise<Response> {
+  const { method = "GET", body, query, signal } = options;
   const headers: Record<string, string> = {
     Accept: "application/json",
+    "X-Requested-With": "PingMyNest",
   };
+  if (body !== undefined) headers["Content-Type"] = "application/json";
 
-  if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  // Cookie auth (credentials) + Bearer fallback for current / local backends
-  if (auth) {
-    const token = getSessionToken();
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
-
-  const res = await fetch(apiUrl(path, query), {
+  return fetch(apiUrl(path, query), {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
     credentials: "include",
     signal,
   });
+}
 
-  const parsed = await parseBody(res);
+// One refresh at a time per tab; parallel 401s all wait on the same call.
+let refreshing: Promise<boolean> | null = null;
 
-  if (!res.ok) {
-    if (res.status === 401) clearSessionToken();
-    throw new ApiError(res.status, errorMessage(res.status, parsed), parsed);
+/** Non-secret hint cookie the API sets beside the httpOnly session cookies. */
+function maybeSignedIn(): boolean {
+  return typeof document !== "undefined" && document.cookie.includes("pmn_signed_in=");
+}
+
+function refreshSession(): Promise<boolean> {
+  refreshing ??= send("/refresh", { method: "POST" })
+    .then((res) => res.ok)
+    .catch(() => false)
+    .finally(() => {
+      refreshing = null;
+    });
+  return refreshing;
+}
+
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { auth = true } = options;
+  let res = await send(path, options);
+
+  // Access token expired: rotate the refresh token and retry once. Skipped
+  // for visitors who were never signed in (no hint cookie). The API clears
+  // the hint whenever a session is really over, so if it survives a failed
+  // refresh, another tab won the rotation race and its cookies are in the jar.
+  if (res.status === 401 && auth && maybeSignedIn()) {
+    await refreshSession();
+    if (maybeSignedIn()) res = await send(path, options);
   }
 
+  const parsed = await parseBody(res);
+  if (!res.ok) {
+    throw new ApiError(res.status, errorMessage(res.status, parsed), parsed);
+  }
   return parsed as T;
 }
 
@@ -100,19 +126,9 @@ export const api = {
       signal,
     }),
 
-  /**
-   * Call after the user lands on /verify?token=...
-   * Stores Bearer token if the API returns one (local backends often do).
-   */
-  verify: async (token: string, signal?: AbortSignal) => {
-    const data = await request<VerifyResponse>("/verify", {
-      auth: false,
-      query: { token },
-      signal,
-    });
-    if (data.token) setSessionToken(data.token);
-    return data;
-  },
+  /** Call after the user lands on /verify?token=...; the API sets the session cookies. */
+  verify: (token: string, signal?: AbortSignal) =>
+    request<VerifyResponse>("/verify", { auth: false, query: { token }, signal }),
 
   search: async (params: SearchParams, signal?: AbortSignal) => {
     const data = await request<Partial<SearchResponse>>("/search", {
@@ -141,6 +157,9 @@ export const api = {
     } satisfies SearchResponse;
   },
 
+  /** Autocomplete catalog; the browser builds a trie from it once. */
+  courses: (signal?: AbortSignal) => request<Catalog>("/courses", { auth: false, signal }),
+
   watch: (payload: WatchRequest, signal?: AbortSignal) =>
     request<MessageResponse>("/watch", {
       method: "POST",
@@ -159,18 +178,9 @@ export const api = {
       signal,
     }),
 
-  logout: async (signal?: AbortSignal) => {
-    try {
-      await request<MessageResponse | null>("/logout", { signal });
-    } catch (err) {
-      // /logout may not exist on older backends — still clear local session
-      if (!(err instanceof ApiError) || (err.status !== 404 && err.status !== 405)) {
-        clearSessionToken();
-        throw err;
-      }
-    }
-    clearSessionToken();
-  },
+  /** Signs out on every device (the API bumps the token version). */
+  logout: (signal?: AbortSignal) =>
+    request<MessageResponse>("/logout", { method: "POST", auth: false, signal }),
 };
 
 /** Parse free-text like "MAT 101", "mat101", "CSC111" into search params. */
@@ -274,7 +284,7 @@ export function toUsmTime(raw: string): string | undefined {
   return `${String(hour).padStart(2, "0")}.${min}`;
 }
 
-export { ApiError, getSessionToken, setSessionToken, clearSessionToken };
+export { ApiError };
 export type {
   ClassSection,
   HealthResponse,

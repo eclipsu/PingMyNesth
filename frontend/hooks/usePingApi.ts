@@ -61,6 +61,13 @@ export function usePingApi() {
   }, []);
 
   useEffect(() => {
+    // sessions moved to httpOnly cookies; don't leave the old token readable
+    try {
+      window.localStorage.removeItem("pmn_session");
+      window.sessionStorage.removeItem("pmn_session");
+    } catch {
+      /* storage blocked */
+    }
     let cancelled = false;
     (async () => {
       try {

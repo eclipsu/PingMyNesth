@@ -21,6 +21,9 @@ func classSearchHandler(w http.ResponseWriter, r *http.Request) {
 
 	var merged ClassSearchResponse
 	merged.PageCount = 1
+	merged.Classes = []ClassSection{}
+	// SUBJ_ALL.json overlaps per-course files, so keep the first copy of each section
+	seen := map[int]bool{}
 
 	files, _ := os.ReadDir(dataDir)
 	for _, file := range files {
@@ -55,6 +58,10 @@ func classSearchHandler(w http.ResponseWriter, r *http.Request) {
 			if instructorFilter != "" && c.InstructorLast != "" && c.InstructorLast != instructorFilter {
 				continue
 			}
+			if seen[c.ClassNbr] {
+				continue
+			}
+			seen[c.ClassNbr] = true
 			merged.Classes = append(merged.Classes, c)
 		}
 	}

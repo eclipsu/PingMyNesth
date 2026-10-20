@@ -1,14 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
-import {
-  Calendar,
-  Clock,
-  Eye,
-  User,
-  Users,
-  X,
-} from "lucide-react";
+import Link from "next/link";
+import * as Dialog from "@radix-ui/react-dialog";
+import { Bell, Calendar, Clock, Hash, MapPin, User, X } from "lucide-react";
+import { SeatBadge, SeatMeter } from "@/components/ui/Seats";
 import {
   formatDays,
   formatTimeRange,
@@ -22,9 +17,11 @@ type Props = {
   onClose: () => void;
   onPing: () => void;
   pinging?: boolean;
+  /** Visitor tried to watch while signed out — swap the CTA for a sign-in prompt. */
+  needsSignIn?: boolean;
 };
 
-export function SectionDetailModal({ section, onClose, onPing, pinging }: Props) {
+export function SectionDetailModal({ section, onClose, onPing, pinging, needsSignIn }: Props) {
   const status = seatStatus(section);
   const professor = instructorLabel(section);
   const days = formatDays(section.days);
@@ -33,148 +30,98 @@ export function SectionDetailModal({ section, onClose, onPing, pinging }: Props)
   const cap = section.class_capacity ?? 0;
   const full = status === "FULL";
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="section-detail-title"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-gold/25 bg-surface p-5 text-white shadow-[0_30px_80px_rgba(0,0,0,0.55)] sm:p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 id="section-detail-title" className="text-2xl font-bold tracking-tight text-gold">
-              {section.subject}
-              {section.catalog_nbr}
-            </h2>
-            <p className="mt-1 text-lg font-semibold leading-snug">{section.descr}</p>
-            <p className="mt-2 text-sm text-white/45">
-              Section {section.class_section} · CRN {section.class_nbr}
-            </p>
+    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-[80] bg-ink/30 backdrop-blur-[2px] data-[state=open]:animate-[fade-in_150ms_ease-out]" />
+        <Dialog.Content className="fixed inset-x-0 bottom-0 z-[81] max-h-[92vh] overflow-y-auto rounded-t-lg border border-line bg-surface p-6 shadow-[var(--shadow-float)] outline-none data-[state=open]:animate-[sheet-in_220ms_cubic-bezier(0.22,1,0.36,1)] sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:p-7 sm:data-[state=open]:animate-[pop-in_180ms_ease-out]">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-muted">§{section.class_section}</span>
+                <SeatBadge status={status} />
+              </div>
+              <Dialog.Title className="mt-2 text-2xl font-bold text-ink">
+                {section.subject} {section.catalog_nbr}
+              </Dialog.Title>
+              <Dialog.Description className="mt-0.5 text-ink-2">{section.descr}</Dialog.Description>
+            </div>
+            <Dialog.Close
+              className="-mr-2 -mt-1 rounded-lg p-2 text-muted hover:bg-subtle hover:text-ink"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </Dialog.Close>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/15 p-2 text-white/50 hover:border-gold hover:text-gold"
-            aria-label="Close"
+
+          <SeatMeter status={status} avail={avail} cap={cap} className="mt-6 border-y border-line py-4" />
+
+          <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
+            <DetailItem icon={<User className="h-4 w-4" />} label="Professor" value={professor || "Staff"} />
+            <DetailItem icon={<Calendar className="h-4 w-4" />} label="Days" value={days || "TBA"} />
+            <DetailItem icon={<Clock className="h-4 w-4" />} label="Time" value={time || "TBA"} />
+            <DetailItem icon={<Hash className="h-4 w-4" />} label="CRN" value={String(section.class_nbr)} mono />
+            {section.campus ? (
+              <DetailItem icon={<MapPin className="h-4 w-4" />} label="Campus" value={section.campus} />
+            ) : null}
+          </dl>
+
+          {needsSignIn ? (
+            <div className="mt-7 border-t border-line pt-5">
+              <p className="font-semibold text-ink">Sign in to get seat alerts</p>
+              <p className="mt-1 text-sm leading-relaxed text-ink-2">
+                We&apos;ll email a magic link to your USM address. Once you&apos;re in, come back
+                and hit Ping me on {section.subject} {section.catalog_nbr}.
+              </p>
+              <Link href="/signup" className="btn btn-accent mt-4 w-full">
+                Continue with USM email
+              </Link>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={pinging}
+              onClick={onPing}
+              className="btn btn-accent mt-7 h-12 w-full"
+            >
+              <Bell className="h-4 w-4" aria-hidden />
+              {pinging ? "Saving…" : full ? "Ping me when a seat opens" : "Watch this section"}
+            </button>
+          )}
+          <p className="mt-3 text-center text-xs text-muted">
+            One email per opening. Stop watching anytime.
+          </p>
+          <Link
+            href={`/prereqs?course=${encodeURIComponent(`${section.subject} ${section.catalog_nbr}`)}`}
+            className="mt-4 block text-center text-sm font-semibold text-ink underline decoration-accent decoration-2 underline-offset-4"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="mt-5 flex items-end justify-between gap-3 rounded-xl border border-white/10 bg-black/50 px-4 py-3">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/40">Seats</p>
-            <p
-              className={`mt-1 text-sm font-semibold ${
-                full ? "text-danger" : status === "1 LEFT" ? "text-gold" : "text-success"
-              }`}
-            >
-              {full ? "No seats left" : status === "1 LEFT" ? "1 seat left" : `${avail} seats left`}
-            </p>
-          </div>
-          <div className="text-right">
-            <p
-              className={`text-3xl font-bold leading-none ${
-                full ? "text-danger" : status === "1 LEFT" ? "text-gold" : "text-success"
-              }`}
-            >
-              {avail}
-            </p>
-            <p className="mt-1 text-xs text-white/40">of {cap}</p>
-          </div>
-        </div>
-
-        <div className="mt-4 divide-y divide-white/10 overflow-hidden rounded-xl border border-white/10 bg-black/40 px-4">
-          <DetailRow
-            icon={<User className="h-4 w-4" />}
-            label="Professor"
-            value={professor || "TBA"}
-          />
-          <DetailRow
-            icon={<Calendar className="h-4 w-4" />}
-            label="Days"
-            value={days || "TBA"}
-          />
-          <DetailRow
-            icon={<Clock className="h-4 w-4" />}
-            label="Time"
-            value={time || "TBA"}
-          />
-          <DetailRow
-            icon={<Users className="h-4 w-4" />}
-            label="CRN"
-            value={String(section.class_nbr)}
-          />
-          <DetailRow
-            icon={<Eye className="h-4 w-4" />}
-            label="Watching"
-            value="Join the nest"
-            sub="We'll ping you when a seat opens"
-          />
-        </div>
-
-        {section.campus ? (
-          <div className="mt-5">
-            <p className="text-sm font-bold text-gold">Campus</p>
-            <p className="mt-1 text-sm text-white/65">{section.campus}</p>
-          </div>
-        ) : null}
-
-        {section.descr ? (
-          <div className="mt-5">
-            <p className="text-sm font-bold text-gold">Description</p>
-            <p className="mt-1 text-sm leading-relaxed text-white/65">{section.descr}</p>
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          disabled={pinging}
-          onClick={onPing}
-          className="btn btn-gold mt-6 w-full !rounded-xl disabled:opacity-60"
-        >
-          {pinging ? "Saving…" : full ? "Ping Me when a seat opens" : "Watch this section"}
-        </button>
-      </div>
-    </div>
+            Prerequisite map for {section.subject} {section.catalog_nbr}
+          </Link>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
-function DetailRow({
+function DetailItem({
   icon,
   label,
   value,
-  sub,
+  mono,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  sub?: React.ReactNode;
+  mono?: boolean;
 }) {
   return (
-    <div className="flex gap-3 py-3.5">
-      <span className="mt-0.5 text-gold">{icon}</span>
+    <div className="flex gap-2.5">
+      <span className="mt-0.5 text-muted">{icon}</span>
       <div className="min-w-0">
-        <p className="text-xs text-white/45">{label}</p>
-        <p className="font-semibold text-white">{value}</p>
-        {sub ? <div className="mt-0.5 text-sm text-white/55">{sub}</div> : null}
+        <dt className="text-xs text-muted">{label}</dt>
+        <dd className={mono ? "font-mono text-sm text-ink" : "text-sm font-medium text-ink"}>
+          {value}
+        </dd>
       </div>
     </div>
   );

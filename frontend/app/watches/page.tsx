@@ -3,18 +3,19 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Search as SearchIcon, Trash2 } from "lucide-react";
-import { BrandLogo } from "@/components/landing/BrandLogo";
+import { Bell, BellOff, LogOut, Plus, Trash2 } from "lucide-react";
+import { Navbar } from "@/components/landing/Navbar";
 import { usePingApi, type WatchItem } from "@/hooks/usePingApi";
+import { cn } from "@/lib/cn";
 
 function statusChip(w: WatchItem) {
   if (!w.active) {
-    return { label: "Notified", className: "border-white/20 bg-white/5 text-white/55" };
+    return { label: "Notified", className: "text-muted", dot: "bg-muted" };
   }
   if (w.enrollment_available > 0) {
-    return { label: "Open now", className: "border-success/35 bg-success/20 text-success" };
+    return { label: "Open now", className: "text-open", dot: "bg-open" };
   }
-  return { label: "Watching", className: "border-gold/45 bg-gold/15 text-gold" };
+  return { label: "Watching", className: "text-accent-ink", dot: "bg-accent" };
 }
 
 export default function WatchesPage() {
@@ -69,122 +70,153 @@ export default function WatchesPage() {
   };
 
   const loading = !sessionChecked || (user && watches === null);
+  const activeCount = watches?.filter((w) => w.active).length ?? 0;
+  const openCount = watches?.filter((w) => w.active && w.enrollment_available > 0).length ?? 0;
+  const notifiedCount = watches?.filter((w) => !w.active).length ?? 0;
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-ink text-white">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-gold/20 via-gold/5 to-transparent" />
+    <>
+      <Navbar />
+      <main className="flex-1">
+        <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h1 className="text-5xl font-bold text-ink sm:text-6xl">
+                Your nest
+              </h1>
+              {user ? (
+                <p className="mt-2 text-muted">
+                  Alerts go to <span className="font-medium text-ink">{user.email}</span>
+                </p>
+              ) : null}
+            </div>
+            <div className="flex gap-2">
+              {user ? (
+                <button type="button" onClick={() => void onLogout()} className="btn btn-ghost btn-sm">
+                  <LogOut className="h-4 w-4" aria-hidden />
+                  Sign out everywhere
+                </button>
+              ) : null}
+              <Link href="/search" className="btn btn-primary btn-sm">
+                <Plus className="h-4 w-4" aria-hidden />
+                Add a class
+              </Link>
+            </div>
+          </div>
 
-      <header className="sticky top-0 z-40 border-b border-white/10 bg-black/80 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2">
-            <BrandLogo className="h-8 w-8" title="Ping My Nest" />
-            <span className="text-sm font-semibold">Ping My Nest</span>
-          </Link>
-          {user ? (
-            <button
-              type="button"
-              onClick={() => void onLogout()}
-              className="text-xs font-semibold text-white/55 hover:text-gold"
-            >
-              Sign out
-            </button>
+          {watches && watches.length > 0 ? (
+            <dl className="mt-8 grid grid-cols-3 divide-x divide-line rounded-md border border-line bg-surface">
+              {[
+                { label: "Watching", value: activeCount },
+                { label: "Open now", value: openCount },
+                { label: "Notified", value: notifiedCount },
+              ].map((s) => (
+                <div key={s.label} className="px-5 py-4">
+                  <dt className="text-sm text-muted">{s.label}</dt>
+                  <dd className="mt-1 text-2xl font-semibold tracking-tight text-ink">{s.value}</dd>
+                </div>
+              ))}
+            </dl>
           ) : null}
-        </div>
-      </header>
 
-      <div className="relative mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-10">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">My watches</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-              Classes we&apos;re watching for you
-            </h1>
-            {user ? (
-              <p className="mt-1.5 text-sm text-white/55">
-                Alerts go to <span className="font-medium text-gold">{user.email}</span>
-              </p>
-            ) : null}
-          </div>
-          <Link href="/search" className="btn btn-gold !rounded-xl !py-2.5 !px-4 text-sm">
-            <SearchIcon className="mr-1.5 h-4 w-4" aria-hidden />
-            Add a class
-          </Link>
-        </div>
-
-        {error ? (
-          <p className="mt-6 text-sm text-danger" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        {loading ? (
-          <p className="mt-10 text-sm text-white/55">Loading your watches…</p>
-        ) : watches && watches.length === 0 ? (
-          <div className="mt-10 rounded-2xl border border-white/10 bg-surface p-8 text-center">
-            <Bell className="mx-auto h-6 w-6 text-gold" aria-hidden />
-            <p className="mt-3 font-semibold">No watches yet</p>
-            <p className="mt-1 text-sm text-white/55">
-              Search for a full class and hit Ping Me. We&apos;ll email you when a seat opens.
+          {error ? (
+            <p className="mt-6 rounded-md bg-full-soft px-4 py-3 text-sm text-full" role="alert">
+              {error}
             </p>
-          </div>
-        ) : (
-          <ul className="mt-8 space-y-3">
-            {watches?.map((w) => {
-              const chip = statusChip(w);
-              const busy = pending === w.class_nbr;
-              return (
-                <li
-                  key={w.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-surface p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
-                >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold">
-                        {w.subject} {w.catalog_nbr}-{w.class_section}
-                      </span>
-                      <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${chip.className}`}
-                      >
-                        {chip.label}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 truncate text-sm text-white/55">{w.descr}</p>
-                    <p className="mt-0.5 text-xs text-white/40">CRN {w.class_nbr}</p>
-                  </div>
+          ) : null}
 
-                  <div className="flex shrink-0 gap-2">
-                    {!w.active ? (
+          {loading ? (
+            <ul className="mt-8 space-y-3">
+              {[0, 1, 2].map((i) => (
+                <li key={i} className="card flex items-center gap-4 p-5">
+                  <div className="flex-1 space-y-2">
+                    <div className="skeleton h-4 w-40 rounded" />
+                    <div className="skeleton h-3 w-64 rounded" />
+                  </div>
+                  <div className="skeleton h-9 w-20 rounded-lg" />
+                </li>
+              ))}
+            </ul>
+          ) : watches && watches.length === 0 ? (
+            <div className="mt-10 rounded-lg border border-dashed border-line-strong px-6 py-16 text-center">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-accent-soft text-accent-ink">
+                <Bell className="h-5 w-5" aria-hidden />
+              </span>
+              <p className="mt-5 text-lg font-semibold text-ink">Your nest is empty</p>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-muted">
+                Search for a full class and hit Ping me. We&apos;ll email you when a seat opens.
+              </p>
+              <Link href="/search" className="btn btn-accent btn-sm mt-6">
+                Find a class
+              </Link>
+            </div>
+          ) : (
+            <ul className="mt-6 space-y-3">
+              {watches?.map((w) => {
+                const chip = statusChip(w);
+                const busy = pending === w.class_nbr;
+                return (
+                  <li
+                    key={w.id}
+                    className={cn(
+                      "card flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between",
+                      !w.active && "bg-bg shadow-none",
+                    )}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[17px] font-semibold tracking-tight text-ink">
+                          {w.subject} {w.catalog_nbr}
+                        </span>
+                        <span className="font-mono text-xs text-muted">§{w.class_section}</span>
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider",
+                            chip.className,
+                          )}
+                        >
+                          <span className={cn("h-2 w-2", chip.dot)} aria-hidden />
+                          {chip.label}
+                        </span>
+                      </div>
+                      <p className="mt-1 truncate text-sm text-ink-2">{w.descr}</p>
+                      <p className="mt-1 font-mono text-xs text-muted">CRN {w.class_nbr}</p>
+                    </div>
+
+                    <div className="flex shrink-0 gap-2">
+                      {!w.active ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void onRewatch(w.class_nbr)}
+                          className="btn btn-secondary btn-sm"
+                        >
+                          <Bell className="h-4 w-4" aria-hidden />
+                          Watch again
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void onRewatch(w.class_nbr)}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-gold/40 bg-gold/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-gold hover:bg-gold hover:text-ink disabled:opacity-50"
+                        onClick={() => void onRemove(w.class_nbr)}
+                        className="btn btn-ghost btn-sm hover:!bg-full-soft hover:!text-full"
+                        aria-label={`Stop watching ${w.subject} ${w.catalog_nbr}-${w.class_section}`}
                       >
-                        <Bell className="h-3.5 w-3.5" aria-hidden />
-                        Watch again
+                        {w.active ? (
+                          <BellOff className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <Trash2 className="h-4 w-4" aria-hidden />
+                        )}
+                        {w.active ? "Stop" : "Remove"}
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void onRemove(w.class_nbr)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-2 text-xs font-bold uppercase tracking-wider text-white/70 hover:border-danger/50 hover:text-danger disabled:opacity-50"
-                      aria-label={`Stop watching ${w.subject} ${w.catalog_nbr}-${w.class_section}`}
-                    >
-                      {w.active ? (
-                        <BellOff className="h-3.5 w-3.5" aria-hidden />
-                      ) : (
-                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                      )}
-                      {w.active ? "Stop" : "Remove"}
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    </main>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </main>
+    </>
   );
 }

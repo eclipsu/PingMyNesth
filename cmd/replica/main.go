@@ -3,6 +3,9 @@
 // Usage:
 //
 //	replica --populate MAT 167     Poll real USM once, save response to data/MAT_167.json
+//	replica --populate MAT CSC     Save whole subjects to data/MAT_ALL.json, data/CSC_ALL.json
+//	replica --subjects             Save USM's subject list to data/subjects.json
+//	replica --catalog              Build internal/catalog/catalog.json for autocomplete
 //	replica --watch [--port 8081]  Start serving saved data in the background
 //	replica --status               Show if running + uptime
 //	replica --restart [--port]     Stop (if running) and start again
@@ -26,11 +29,28 @@ func main() {
 
 	switch os.Args[1] {
 	case "--populate":
-		if len(os.Args) < 4 {
-			fmt.Println("usage: replica --populate <SUBJECT> <CATALOG_NBR>")
+		switch {
+		case len(os.Args) == 4 && isCatalogNbr(os.Args[3]):
+			cmdPopulate([]string{os.Args[2]}, os.Args[3])
+		case len(os.Args) >= 3:
+			cmdPopulate(os.Args[2:], "")
+		default:
+			fmt.Println("usage: replica --populate <SUBJECT> [CATALOG_NBR] | <SUBJECT> <SUBJECT>...")
 			os.Exit(1)
 		}
-		cmdPopulate(os.Args[2], os.Args[3])
+
+	case "--subjects":
+		cmdSubjects()
+
+	case "--catalog":
+		cmdCatalog()
+
+	case "--prereqs":
+		if len(os.Args) < 3 {
+			fmt.Println("usage: replica --prereqs <SUBJECT>...")
+			os.Exit(1)
+		}
+		cmdPrereqs(os.Args[2:])
 
 	case "--watch":
 		cmdWatchLauncher(portFlag())
@@ -69,6 +89,11 @@ func main() {
 	}
 }
 
+// isCatalogNbr tells "MAT 167" (one course) apart from "MAT CSC" (two subjects).
+func isCatalogNbr(s string) bool {
+	return s != "" && s[0] >= '0' && s[0] <= '9'
+}
+
 func portFlag() string {
 	port := "8081"
 	for i, a := range os.Args {
@@ -84,6 +109,10 @@ func printHelp() {
 
 Usage:
   replica --populate <SUBJECT> <CATALOG_NBR>   Poll real USM once, save to data/
+  replica --populate <SUBJECT>...              Save whole subjects (5s between requests)
+  replica --subjects                           Save USM's subject list to data/subjects.json
+  replica --prereqs <SUBJECT>...               Save prerequisite text per course (resumable, 5s/request)
+  replica --catalog                            Build internal/catalog/catalog.json (offline)
   replica --watch [--port 8081]                Start serving saved data in the background
   replica --status                             Show if running + uptime
   replica --restart [--port 8081]              Stop (if running) and start again

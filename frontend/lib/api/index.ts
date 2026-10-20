@@ -11,12 +11,7 @@ export {
   toUsmTime,
 } from "./client";
 export { getApiConfig, apiUrl } from "./config";
-export {
-  ApiError,
-  getSessionToken,
-  setSessionToken,
-  clearSessionToken,
-} from "./client";
+export { ApiError } from "./client";
 export type { ApiConfig } from "./config";
 export type {
   ClassSection,

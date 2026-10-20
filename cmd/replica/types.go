@@ -1,33 +1,24 @@
 package main
 
-type ClassSection struct {
-	ClassNbr        int    `json:"class_nbr"`
-	Subject         string `json:"subject"`
-	CatalogNbr      string `json:"catalog_nbr"`
-	ClassSection    string `json:"class_section"`
-	Descr           string `json:"descr"`
-	Strm            string `json:"strm"`
-	EnrollmentAvail int    `json:"enrollment_available"`
-	ClassCapacity   int    `json:"class_capacity"`
-	EnrlStatDescr   string `json:"enrl_stat_descr"`
+import "github.com/oscusm/PingMyNest/internal/usm"
 
-	Campus          string `json:"campus,omitempty"`
-	AcadCareer      string `json:"acad_career,omitempty"`
-	SessionCode     string `json:"session_code,omitempty"`
-	Days            string `json:"days,omitempty"`
-	StartTime       string `json:"start_time,omitempty"`
-	EndTime         string `json:"end_time,omitempty"`
-	InstructorLast  string `json:"instructor_name,omitempty"`
-	InstructorFirst string `json:"instr_first_name,omitempty"`
+// The mock serves the same flat shape as our API.
+type ClassSection = usm.ClassSection
+type ClassSearchResponse = usm.ClassSearchResponse
+
+type usmSubject struct {
+	Subject string `json:"subject"`
+	Descr   string `json:"descr"`
 }
 
-type ClassSearchResponse struct {
-	PageCount int            `json:"pageCount"`
-	Classes   []ClassSection `json:"classes"`
+type usmOptionsResponse struct {
+	Subjects []usmSubject `json:"subjects"`
 }
 
 const dataDir = "data"
 const pidFile = "data/replica.pid"
 const logFile = "data/replica.log"
 const startTimeFile = "data/replica.started"
+const subjectsFile = "data/subjects.json"
+const catalogFile = "internal/catalog/catalog.json"
 const version = "0.1.0"

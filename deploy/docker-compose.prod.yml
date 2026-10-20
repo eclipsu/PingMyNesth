@@ -1,0 +1,64 @@
+# Production stack on the Lightsail instance. Deployed by
+# .github/workflows/deploy.yml; secrets live in ./.env on the server only.
+#
+# No replica here: with DEVELOPMENT unset, the api and worker talk to real USM.
+name: pingmynest
+
+services:
+  caddy:
+    image: caddy:2.8.4
+    restart: unless-stopped
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # TLS certificates; keep across deploys
+      - caddy_config:/config
+    depends_on: [frontend, api]
+
+  frontend:
+    image: ghcr.io/oscusm/pingmynest-frontend:${TAG:-latest}
+    restart: unless-stopped
+
+  api:
+    image: ghcr.io/oscusm/pingmynest-api:${TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  worker:
+    image: ghcr.io/oscusm/pingmynest-worker:${TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pingmynest
+      POSTGRES_USER: pingmynest
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pingmynest -d pingmynest"]
+      interval: 5s
+      retries: 20
+    # no ports: only reachable from the other containers
+
+  # one-shot: `docker compose run --rm migrate` before starting a new version
+  migrate:
+    image: migrate/migrate:v4.18.1
+    profiles: ["tools"]
+    volumes:
+      - ./migrations:/migrations:ro
+    command: ["-path", "/migrations", "-database", "postgres://pingmynest:${POSTGRES_PASSWORD}@postgres:5432/pingmynest?sslmode=disable", "up"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

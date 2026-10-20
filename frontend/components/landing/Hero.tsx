@@ -4,17 +4,15 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion, useReducedMotion } from "framer-motion";
-import Image from "next/image";
-import { BrandLogo } from "./BrandLogo";
-import { DashboardMock } from "./DashboardMock";
+import { FadeIn } from "./FadeIn";
+import { HeroPreview } from "./HeroPreview";
+import { CourseCombobox } from "@/components/search/CourseCombobox";
 import { usePingApi } from "@/hooks/usePingApi";
 
-const chips = ["MAT", "MAT 101", "CSC 111", "ENG 101", "BSC 110"] as const;
+const chips = ["MAT 101", "CSC 101", "ENG 101", "BSC 110", "PSY 110"] as const;
 
 export function Hero() {
   const router = useRouter();
-  const reduce = useReducedMotion();
   const { user } = usePingApi();
   const [query, setQuery] = useState("");
 
@@ -30,146 +28,64 @@ export function Hero() {
   };
 
   return (
-    <section className="relative min-h-[100svh] overflow-hidden bg-ink text-white">
-      <div className="pointer-events-none absolute inset-0">
-        <Image
-          src="/images/usm-campus.jpg"
-          alt="University of Southern Mississippi campus"
-          fill
-          priority
-          className="object-cover object-center"
-          sizes="100vw"
-        />
-        <div className="absolute inset-0 bg-black/75" />
-        <div className="absolute inset-0 bg-gradient-to-r from-black via-black/80 to-black/45" />
-      </div>
-
-      <div className="relative mx-auto grid max-w-[1280px] items-center gap-12 px-5 pb-16 pt-28 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10 lg:pb-20 lg:pt-32">
-        <div>
-          <BrandLogo className="h-12 w-12" title="Ping My Nest" priority />
-
-          <motion.p
-            className="mt-6 text-sm font-semibold uppercase tracking-[0.2em] text-gold"
-            initial={reduce ? false : { opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+    <section className="brushed-gold text-ink">
+      <div className="mx-auto max-w-6xl px-4 pb-20 pt-14 sm:px-6 sm:pt-20 lg:pb-24">
+        <div className="mx-auto max-w-4xl text-center">
+          <Link
+            href={user ? "/search" : "/signup"}
+            className="inline-flex items-center gap-2 text-[13px] font-semibold text-ink/80 transition-colors hover:text-ink"
           >
-            Never miss an open class
-          </motion.p>
+            <span className="font-bold uppercase tracking-wider text-ink">Free</span>
+            <span aria-hidden className="text-ink/40">/</span>
+            Built by USM students, for Golden Eagles
+          </Link>
 
-          <motion.h1
-            className="mt-3 max-w-xl text-[clamp(2.8rem,6.5vw,4.75rem)] font-semibold leading-[0.98] tracking-tight text-white"
-            initial={reduce ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.04 }}
-          >
-            Find your next class.
-            <br />
-            We&apos;ll keep <span className="text-gold">watch</span>.
-          </motion.h1>
+          <h1 className="mt-8 text-[clamp(3.25rem,9vw,6.75rem)] font-extrabold leading-[0.92]">
+            Class full? We&apos;ll <span className="underline decoration-ink decoration-[0.12em] underline-offset-[0.1em]">ping you</span>
+            <br className="hidden sm:block" /> the second a seat opens.
+          </h1>
 
-          <motion.p
-            className="mt-5 max-w-lg text-base leading-relaxed text-white/65 sm:text-lg"
-            initial={reduce ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.08 }}
-          >
-            Ping My Nest monitors course availability and emails you the moment a
-            seat opens. No more refreshing SOAR every hour.
-          </motion.p>
+          <p className="mx-auto mt-7 max-w-xl text-lg font-medium leading-relaxed text-ink/80">
+            Watch any section at Southern Miss and get an email the moment someone
+            drops. No more refreshing SOAR at 2&nbsp;a.m.
+          </p>
 
-          <motion.form
+          <form
             onSubmit={submitSearch}
-            className="mt-8 flex w-full max-w-xl items-stretch border border-white/15 bg-black/70 p-1.5"
-            initial={reduce ? false : { opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            className="mx-auto mt-9 flex max-w-xl items-center gap-2 rounded-md border border-ink/15 bg-surface p-1.5 shadow-[var(--shadow-float)] ring-ink focus-within:ring-2"
             role="search"
           >
-            <Search className="ml-3 mt-3.5 h-5 w-5 shrink-0 text-gold" aria-hidden />
+            <Search className="ml-2.5 h-5 w-5 shrink-0 text-muted" aria-hidden />
             <label htmlFor="hero-search" className="sr-only">
               Search classes
             </label>
-            <input
+            <CourseCombobox
               id="hero-search"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. MAT 101 or CSC 111"
-              className="min-w-0 flex-1 bg-transparent px-3 py-3 text-sm text-white outline-none placeholder:text-white/40 sm:text-base"
+              onChange={setQuery}
+              onPick={(s) => goSearch(s.query)}
+              placeholder="Calculus I, calc, or MAT 101"
+              className="min-w-0 flex-1"
+              inputClassName="h-11 w-full bg-transparent px-1 text-base text-ink outline-none placeholder:text-[#8b8b95]"
             />
-            <button type="submit" className="btn btn-gold !rounded-lg shrink-0" aria-label="Search">
-              Search
+            <button type="submit" className="btn btn-primary">
+              Find seats
             </button>
-          </motion.form>
+          </form>
 
-          <motion.div
-            className="mt-4 flex flex-wrap gap-2"
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.12 }}
-          >
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+            <span className="mr-1 text-sm font-semibold text-ink/75">Popular:</span>
             {chips.map((chip) => (
-              <button
-                key={chip}
-                type="button"
-                onClick={() => goSearch(chip)}
-                className="border border-white/20 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white/75 hover:border-gold hover:text-gold"
-              >
+              <button key={chip} type="button" onClick={() => goSearch(chip)} className="chip border-ink/20 bg-white/70 text-ink hover:bg-white">
                 {chip}
               </button>
             ))}
-          </motion.div>
-
-          <motion.div
-            className="mt-8 flex flex-wrap gap-3"
-            initial={reduce ? false : { opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.14 }}
-          >
-            {user ? (
-              <Link href="/search" className="btn btn-gold">
-                Browse Classes
-              </Link>
-            ) : (
-              <>
-                <Link href="/signup" className="btn btn-gold">
-                  Start Watching
-                </Link>
-                <Link href="/search" className="btn btn-ghost">
-                  Browse Classes
-                </Link>
-              </>
-            )}
-          </motion.div>
-
-          <p className="mt-10 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/35">
-            The University of Southern Mississippi
-          </p>
-        </div>
-
-        <div className="relative mx-auto w-full max-w-[560px] lg:max-w-none">
-          <div className="overflow-hidden border border-white/10 bg-surface shadow-[0_24px_50px_rgba(0,0,0,0.4)]">
-            <div className="flex items-center gap-2 border-b border-white/10 bg-black px-4 py-2.5">
-              <span className="h-2.5 w-2.5 rounded-[2px] bg-[#FF5F57]" />
-              <span className="h-2.5 w-2.5 rounded-[2px] bg-gold" />
-              <span className="h-2.5 w-2.5 rounded-[2px] bg-[#28C840]" />
-              <span className="ml-2 text-[11px] text-white/40">pingmynest · search</span>
-            </div>
-            <div className="h-[300px] bg-ink sm:h-[340px] lg:h-[360px]">
-              <DashboardMock compact />
-            </div>
           </div>
         </div>
-      </div>
 
-      <div className="relative border-y border-black/10 bg-gold">
-        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-3 px-5 py-3.5 sm:px-8">
-          <p className="text-sm font-bold text-ink">
-            Registration week is here — start watching the classes you need.
-          </p>
-          <Link href="/search" className="text-sm font-bold text-ink underline-offset-4 hover:underline">
-            Browse open seats
-          </Link>
-        </div>
+        <FadeIn className="mx-auto mt-16 max-w-4xl sm:mt-20">
+          <HeroPreview />
+        </FadeIn>
       </div>
     </section>
   );

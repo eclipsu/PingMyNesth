@@ -4,11 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	authpkg "github.com/oscusm/PingMyNest/internal/auth"
 	db "github.com/oscusm/PingMyNest/internal/db"
 )
 
-func verifyHandler(queries *db.Queries, jwtSecret string) http.HandlerFunc {
+func verifyHandler(queries *db.Queries, cfg sessionConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := r.URL.Query().Get("token")
 		if token == "" {
@@ -50,15 +49,12 @@ func verifyHandler(queries *db.Queries, jwtSecret string) http.HandlerFunc {
 			return
 		}
 
-		sessionToken, err := authpkg.GenerateToken(jwtSecret, user.ID, user.Email)
-		if err != nil {
+		// the session lives in httpOnly cookies; nothing token-like goes in the body
+		if err := cfg.issueSession(ctx, w, r, queries, user); err != nil {
 			writeError(w, http.StatusInternalServerError, "error generating session")
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]string{
-			"message": "email verified",
-			"token":   sessionToken,
-		})
+		writeJSON(w, http.StatusOK, map[string]string{"message": "email verified"})
 	}
 }
