@@ -121,6 +121,30 @@ func TestMiddlewareStatusAndRetryAfter(t *testing.T) {
 	}
 }
 
+func TestClientIPFromEdgeOnlyWithSecret(t *testing.T) {
+	edgeSecret = "s3cret"
+	defer func() { edgeSecret = "" }()
+	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "10.0.0.9:5555" // the Vercel server / Caddy hop
+	r.Header.Set("X-PMN-Client-IP", "203.0.113.50")
+
+	if ip := getClientIP(r); ip != "10.0.0.9" {
+		t.Errorf("trusted client IP without the secret: %s", ip)
+	}
+	r.Header.Set("X-PMN-Edge-Secret", "wrong")
+	if ip := getClientIP(r); ip != "10.0.0.9" {
+		t.Errorf("trusted client IP with a wrong secret: %s", ip)
+	}
+	r.Header.Set("X-PMN-Edge-Secret", "s3cret")
+	if ip := getClientIP(r); ip != "203.0.113.50" {
+		t.Errorf("with the secret: got %s, want 203.0.113.50", ip)
+	}
+	r.Header.Set("X-PMN-Client-IP", "not-an-ip")
+	if ip := getClientIP(r); ip != "10.0.0.9" {
+		t.Errorf("accepted a malformed client IP: %s", ip)
+	}
+}
+
 func TestClientIPIgnoresSpoofedForwardedFor(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "10.0.0.9:5555"

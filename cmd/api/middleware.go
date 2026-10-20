@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"net"
 	"net/http"
 	"os"
@@ -149,7 +150,21 @@ func (s *rateLimiterStore) cleanupLoop() {
 // trusting it blindly lets anyone dodge the limiter by faking an IP.
 var trustedProxyHops, _ = strconv.Atoi(os.Getenv("TRUSTED_PROXY_HOPS"))
 
+// edgeSecret (EDGE_SECRET) is shared with the Vercel frontend, which forwards
+// /api/* from Vercel's servers and names the real visitor in
+// X-PMN-Client-IP. Without the matching secret that header is ignored, so
+// calling the API directly can't fake an IP.
+var edgeSecret = os.Getenv("EDGE_SECRET")
+
 func getClientIP(r *http.Request) string {
+	if edgeSecret != "" {
+		got := r.Header.Get("X-PMN-Edge-Secret")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(edgeSecret)) == 1 {
+			if ip := net.ParseIP(strings.TrimSpace(r.Header.Get("X-PMN-Client-IP"))); ip != nil {
+				return ip.String()
+			}
+		}
+	}
 	if trustedProxyHops > 0 {
 		parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
 		if i := len(parts) - trustedProxyHops; i >= 0 {

@@ -2,6 +2,8 @@
 # .github/workflows/deploy.yml; secrets live in ./.env on the server only.
 #
 # No replica here: with DEVELOPMENT unset, the api and worker talk to real USM.
+# The frontend is on Vercel; it forwards pingmynest.lol/api/* to
+# api.pingmynest.lol, which Caddy serves here.
 name: pingmynest
 
 services:
@@ -13,11 +15,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data # TLS certificates; keep across deploys
       - caddy_config:/config
-    depends_on: [frontend, api]
-
-  frontend:
-    image: ghcr.io/oscusm/pingmynest-frontend:${TAG:-latest}
-    restart: unless-stopped
+    depends_on: [api]
 
   api:
     image: ghcr.io/oscusm/pingmynest-api:${TAG:-latest}

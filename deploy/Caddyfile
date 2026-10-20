@@ -1,20 +1,7 @@
-# HTTPS is automatic: Caddy gets and renews Let's Encrypt certificates once
-# pingmynest.lol points at this server and ports 80/443 are open.
-pingmynest.lol {
+# api.pingmynest.lol: the Go API. Vercel (pingmynest.lol) forwards /api/* here.
+# HTTPS is automatic once api.pingmynest.lol points at this server and ports
+# 80/443 are open.
+api.pingmynest.lol {
 	encode zstd gzip
-
-	# API straight to Go (prefix stripped), so the API sees exactly one proxy:
-	# Caddy, which replaces any client-sent X-Forwarded-For with the real IP.
-	# That is why TRUSTED_PROXY_HOPS=1.
-	handle_path /api/* {
-		reverse_proxy api:8080
-	}
-
-	handle {
-		reverse_proxy frontend:3000
-	}
-}
-
-www.pingmynest.lol {
-	redir https://pingmynest.lol{uri} permanent
+	reverse_proxy api:8080
 }

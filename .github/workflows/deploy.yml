@@ -1,5 +1,7 @@
-# CI on every pull request; on push to main, also build images, push them to
-# GHCR, and have the Lightsail server pull and launch them.
+# CI on every pull request; on push to main, also build the api and worker
+# images, push them to GHCR, and have the Lightsail server pull and launch
+# them. The frontend deploys on Vercel from the same repo (Root Directory:
+# frontend).
 #
 # Repository secrets (Settings -> Secrets and variables -> Actions):
 #   LIGHTSAIL_HOST     static IP or hostname of the instance
@@ -71,13 +73,6 @@ jobs:
             context: .
             file: Dockerfile
             args: SERVICE=worker
-          - name: frontend
-            context: frontend
-            file: frontend/Dockerfile
-            # /api is routed by Caddy in production; the Next rewrite target is a fallback
-            args: |
-              NEXT_PUBLIC_PRODUCTION=true
-              API_UPSTREAM=http://api:8080
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -147,7 +142,7 @@ jobs:
       - name: Health check
         run: |
           for i in $(seq 1 30); do
-            if curl -fsS https://pingmynest.lol/api/health; then exit 0; fi
+            if curl -fsS https://api.pingmynest.lol/health; then exit 0; fi
             sleep 5
           done
-          echo "pingmynest.lol/api/health did not come up"; exit 1
+          echo "api.pingmynest.lol/health did not come up"; exit 1
