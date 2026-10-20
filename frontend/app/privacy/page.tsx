@@ -42,13 +42,13 @@ export default function PrivacyPage() {
 
           <LegalSection title="What we store">
             <p>
-              We store your verified USM email and the class sections you choose to watch. We
+              We store your verified email and the class sections you choose to watch. We
               don&apos;t store other personal profile data, passwords, or browsing history beyond
               what&apos;s needed to run alerts.
             </p>
             <ul className="space-y-2.5">
               {[
-                "Verified USM email (so we can send seat alerts)",
+                "Verified email (so we can send seat alerts)",
                 "Your watches (which sections you asked us to monitor)",
                 "Single-use sign-in links, which expire",
               ].map((item) => (

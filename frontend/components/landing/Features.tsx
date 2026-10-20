@@ -112,7 +112,7 @@ export function Features() {
               <Lock className="h-5 w-5 text-accent" aria-hidden />
               <h3 className="mt-4 text-xl font-bold">No SOAR login. Ever.</h3>
               <ul className="mt-3 space-y-2 text-[15px] text-white/70">
-                {["Only your USM email", "Public class data only", "No passwords to leak"].map(
+                {["Only your email", "Public class data only", "No passwords to leak"].map(
                   (t) => (
                     <li key={t} className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-accent" aria-hidden />

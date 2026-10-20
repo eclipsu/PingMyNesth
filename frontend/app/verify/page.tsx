@@ -33,7 +33,7 @@ function VerifyInner() {
   const [status, setStatus] = useState<"working" | "ok" | "error">(token ? "working" : "error");
   const [message, setMessage] = useState(
     token
-      ? "Hang tight, confirming your USM email…"
+      ? "Hang tight, confirming your email…"
       : "This sign-in link is incomplete. Open the link from your email again.",
   );
 

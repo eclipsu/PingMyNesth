@@ -70,11 +70,11 @@ export function SectionDetailModal({ section, onClose, onPing, pinging, needsSig
             <div className="mt-7 border-t border-line pt-5">
               <p className="font-semibold text-ink">Sign in to get seat alerts</p>
               <p className="mt-1 text-sm leading-relaxed text-ink-2">
-                We&apos;ll email a magic link to your USM address. Once you&apos;re in, come back
+                We&apos;ll email a sign-in link to your USM or Gmail address. Once you&apos;re in, come back
                 and hit Ping me on {section.subject} {section.catalog_nbr}.
               </p>
               <Link href="/signup" className="btn btn-accent mt-4 w-full">
-                Continue with USM email
+                Continue with email
               </Link>
             </div>
           ) : (

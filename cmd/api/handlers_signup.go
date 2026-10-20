@@ -33,8 +33,8 @@ func signupHandler(queries *db.Queries, sender *notify.EmailSender, guard *signu
 		}
 
 		email := strings.TrimSpace(strings.ToLower(req.Email))
-		if !isUSMEmail(email) {
-			http.Error(w, "use your @usm.edu email", http.StatusBadRequest)
+		if !isAllowedEmail(email) {
+			http.Error(w, "use your @usm.edu or @gmail.com email", http.StatusBadRequest)
 			return
 		}
 
@@ -101,12 +101,21 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// usmLocalPart is the part before "@usm.edu": letters, digits, dots, dashes,
-// underscores. Exactly one "@" and the exact domain, so "x@evilusm.edu" and
-// "x@usm.edu.evil.com" are rejected.
-var usmLocalPart = regexp.MustCompile(`^[a-z0-9._-]+$`)
+// Sign-in is open to these domains. Gmail is allowed for now (it delivers far
+// faster than USM's Outlook); remove it here and in frontend/app/signup to go
+// back to USM-only.
+var allowedEmailDomains = []string{"usm.edu", "gmail.com"}
 
-func isUSMEmail(email string) bool {
-	local, ok := strings.CutSuffix(email, "@usm.edu")
-	return ok && local != "" && usmLocalPart.MatchString(local)
+// localPart is the part before the "@": letters, digits, dots, dashes,
+// underscores, plus (gmail+tag). Exactly one "@" and an exact domain match,
+// so "x@evilusm.edu" and "x@usm.edu.evil.com" are rejected.
+var localPart = regexp.MustCompile(`^[a-z0-9._+-]+$`)
+
+func isAllowedEmail(email string) bool {
+	for _, domain := range allowedEmailDomains {
+		if local, ok := strings.CutSuffix(email, "@"+domain); ok {
+			return local != "" && localPart.MatchString(local)
+		}
+	}
+	return false
 }

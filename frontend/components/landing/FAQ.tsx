@@ -10,11 +10,11 @@ const faqs = [
   },
   {
     q: "What email do I use?",
-    a: "Use your USM email. We'll send a magic link so you can verify and start watching classes. No password to remember.",
+    a: "Your USM email, or a Gmail address if you prefer (Gmail often gets our emails faster). We'll send a sign-in link, so there's no password to remember.",
   },
   {
     q: "What data do you store?",
-    a: "Only your verified USM email and the class sections you watch. Seat counts come from USM's public Class Search; we never access your SOAR login. Details are on the Privacy page.",
+    a: "Only your verified email and the class sections you watch. Seat counts come from USM's public Class Search; we never access your SOAR login. Details are on the Privacy page.",
   },
   {
     q: "Is Ping My Nest only for USM?",

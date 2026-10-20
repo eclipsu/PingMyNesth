@@ -6,8 +6,8 @@ import { AuthShell } from "@/components/AuthShell";
 import { usePingApi } from "@/hooks/usePingApi";
 import { ApiError } from "@/lib/api";
 
-// Mirrors isUSMEmail in cmd/api/handlers_signup.go
-const USM_EMAIL = /^[a-z0-9._-]+@usm\.edu$/i;
+// Mirrors isAllowedEmail in cmd/api/handlers_signup.go (USM, plus Gmail for now)
+const ALLOWED_EMAIL = /^[a-z0-9._+-]+@(usm\.edu|gmail\.com)$/i;
 
 // Mirrors cmd/api/signup_guard.go: 30s between emails, 3 resends, then the
 // server locks sign-in emails for this IP for 30 minutes.
@@ -69,8 +69,8 @@ export default function SignupPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     clearError();
-    if (!USM_EMAIL.test(email.trim())) {
-      setEmailError("Use your @usm.edu email.");
+    if (!ALLOWED_EMAIL.test(email.trim())) {
+      setEmailError("Use your @usm.edu or @gmail.com email.");
       return;
     }
     setEmailError(null);
@@ -156,7 +156,7 @@ export default function SignupPage() {
                 required
                 autoFocus
                 autoComplete="email"
-                placeholder="you@usm.edu"
+                placeholder="you@usm.edu or you@gmail.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);

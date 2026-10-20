@@ -51,7 +51,7 @@ export default function TermsPage() {
 
           <LegalSection title="Your account">
             <p>
-              You need a USM email address to watch sections. Keep access to your inbox secure,
+              You need a USM or Gmail address to watch sections. Keep access to your inbox secure,
               since sign-in links are sent there. One account per person, please.
             </p>
           </LegalSection>
