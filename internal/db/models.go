@@ -8,6 +8,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type PollCycle struct {
+	ID              int64
+	StartedAt       pgtype.Timestamptz
+	DurationMs      int32
+	Subjects        int32
+	SectionsChecked int32
+	UsmRequests     int32
+	Openings        int32
+	Errors          int32
+}
+
 type RefreshToken struct {
 	ID        int32
 	UserID    int32
@@ -16,6 +27,19 @@ type RefreshToken struct {
 	RevokedAt pgtype.Timestamptz
 	UserAgent pgtype.Text
 	CreatedAt pgtype.Timestamptz
+}
+
+type SeatEvent struct {
+	ID           int64
+	ClassNbr     int32
+	Subject      string
+	CatalogNbr   string
+	ClassSection string
+	Descr        string
+	Seats        int32
+	Watchers     int32
+	Notified     int32
+	CreatedAt    pgtype.Timestamptz
 }
 
 type Section struct {
@@ -35,6 +59,13 @@ type User struct {
 	Verified     pgtype.Bool
 	CreatedAt    pgtype.Timestamptz
 	TokenVersion int32
+}
+
+type UsmTraffic struct {
+	Hour      pgtype.Timestamptz
+	Source    string
+	Requests  int32
+	CacheHits int32
 }
 
 type VerificationToken struct {

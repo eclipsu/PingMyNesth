@@ -359,3 +359,86 @@ h2 {
     transform: translateY(100%);
   }
 }
+
+/* ---------- Behind the scenes ---------- */
+
+@keyframes bts-progress {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.bts-progress {
+  width: 0;
+  animation-name: bts-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+/* architecture diagram */
+.arch-title {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  fill: var(--ink);
+}
+
+.arch-sub {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 11px;
+  fill: var(--muted);
+}
+
+.arch-label {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 10.5px;
+  fill: var(--muted);
+}
+
+@keyframes arch-dash {
+  to {
+    stroke-dashoffset: -22;
+  }
+}
+
+.arch-flow[stroke-dasharray] {
+  animation: arch-dash 1.2s linear infinite;
+}
+
+@keyframes arch-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.arch-flash {
+  opacity: 0;
+  animation: arch-flash 1.4s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arch-flow[stroke-dasharray],
+  .arch-flash {
+    animation: none;
+  }
+}
+
+/* admin side sheet */
+@keyframes sheet-right-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+.admin-sheet[data-state="open"] {
+  animation: sheet-right-in 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}

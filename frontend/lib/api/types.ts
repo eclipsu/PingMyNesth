@@ -17,6 +17,8 @@ export type MeResponse = {
   id: number;
   email: string;
   verified: boolean;
+  /** On the API's ADMIN_EMAILS list; unlocks /admin. */
+  admin?: boolean;
 };
 
 export type ClassSection = {
@@ -78,6 +80,125 @@ export type WatchItem = {
 };
 
 export type SeatStatus = "OPEN" | "FULL" | "1 LEFT";
+
+/* ---------- /pulse: what the worker and API actually did ---------- */
+
+export type PulseCycle = {
+  started_at: string;
+  duration_ms: number;
+  subjects: number;
+  sections_checked: number;
+  usm_requests: number;
+  openings: number;
+  errors: number;
+};
+
+export type PulseOpening = {
+  subject: string;
+  catalog_nbr: string;
+  class_section: string;
+  descr: string;
+  seats: number;
+  watchers: number;
+  notified: number;
+  at: string;
+};
+
+export type PulseHour = {
+  hour: string;
+  worker: number;
+  search: number;
+  cache_hits: number;
+};
+
+export type PulseTotals = {
+  cycles: number;
+  sections_checked: number;
+  worker_requests: number;
+  search_requests: number;
+  cache_hits: number;
+  openings: number;
+  alerts: number;
+};
+
+export type PulseResponse = {
+  generated_at: string;
+  worker: {
+    status: "live" | "stalled" | "offline";
+    last_cycle: PulseCycle | null;
+    poll_interval_s: number;
+    request_gap_s: number;
+    search_cache_ttl_s: number;
+  };
+  catalog: { subjects: number; courses: number; instructors: number };
+  watching: { active: number; sections: number; subjects: number };
+  last_24h: PulseTotals;
+  all_time: PulseTotals;
+  /** Last 24 hours, oldest first. */
+  traffic: PulseHour[];
+  /** Oldest first. */
+  recent_cycles: PulseCycle[];
+  recent_openings: PulseOpening[];
+};
+
+/* ---------- /admin ---------- */
+
+export type AdminSection = {
+  class_nbr: number;
+  subject: string;
+  catalog_nbr: string;
+  class_section: string;
+  descr: string;
+  seats: number;
+  watchers: number;
+};
+
+export type AdminOverview = {
+  pulse: PulseResponse;
+  users: { total: number; verified: number; new_this_week: number };
+  watches: { active: number; notified: number; sections: number; subjects: number; watchers: number };
+  top_sections: AdminSection[];
+};
+
+export type AdminUser = {
+  id: number;
+  email: string;
+  verified: boolean;
+  created_at: string | null;
+  active_watches: number;
+  total_watches: number;
+  sessions: number;
+};
+
+export type AdminWatch = {
+  id: number;
+  class_nbr: number;
+  active: boolean;
+  created_at: string | null;
+  user_id?: number;
+  email?: string;
+  subject: string;
+  catalog_nbr: string;
+  class_section: string;
+  descr: string;
+  seats: number;
+  checked_at?: string | null;
+};
+
+export type AdminSession = {
+  id: number;
+  user_agent: string;
+  created_at: string | null;
+  expires_at: string | null;
+};
+
+export type AdminUserDetail = {
+  user: AdminUser;
+  watches: AdminWatch[];
+  sessions: AdminSession[];
+};
+
+export type AdminSeatEvent = PulseOpening & { id: number; class_nbr: number };
 
 export class ApiError extends Error {
   readonly status: number;

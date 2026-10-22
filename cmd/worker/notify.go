@@ -10,14 +10,16 @@ import (
 	"github.com/oscusm/PingMyNest/internal/notify"
 )
 
-func notifyWatchers(ctx context.Context, queries *db.Queries, sender *notify.EmailSender, classNbr int32, subject, catalogNbr, section, descr string, avail int) {
+// notifyWatchers emails everyone watching the section and returns how many
+// were watching and how many emails went out.
+func notifyWatchers(ctx context.Context, queries *db.Queries, sender *notify.EmailSender, classNbr int32, subject, catalogNbr, section, descr string, avail int) (watching, notified int) {
 	watchers, err := queries.GetActiveWatchersForSection(
 		ctx,
 		pgtype.Int4{Int32: classNbr, Valid: true},
 	)
 	if err != nil {
 		log.Println("error getting watchers:", err)
-		return
+		return 0, 0
 	}
 
 	for _, watcher := range watchers {
@@ -26,6 +28,7 @@ func notifyWatchers(ctx context.Context, queries *db.Queries, sender *notify.Ema
 			continue // don't deactivate if the send failed, they should still get notified next time
 		}
 		log.Println("notified:", watcher.Email)
+		notified++
 
 		err := queries.DeactivateWatch(ctx, db.DeactivateWatchParams{
 			UserID: pgtype.Int4{
@@ -41,4 +44,5 @@ func notifyWatchers(ctx context.Context, queries *db.Queries, sender *notify.Ema
 			log.Printf("error deactivating watch for user %d: %v\n", watcher.ID, err)
 		}
 	}
+	return len(watchers), notified
 }

@@ -130,6 +130,13 @@ func contains(list []string, s string) bool {
 	return false
 }
 
+// Counts returns how many subjects, courses, and instructors the catalog holds.
+func (c *Catalog) Counts() (subjects, courses, instructors int) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.subjects), len(c.courses), len(c.instructors)
+}
+
 // Snapshot returns a sorted copy, suitable for JSON.
 func (c *Catalog) Snapshot() Snapshot {
 	c.mu.RLock()

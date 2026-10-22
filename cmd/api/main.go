@@ -57,18 +57,27 @@ func main() {
 		log.Fatal("unable to load course catalog:", err)
 	}
 
+	searchClient := newUSMClient()
+	go recordSearchTraffic(queries, searchClient)
+	pcfg := loadPulseConfig()
+	admins := loadAdmins()
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/signup", signupHandler(queries, sender, newSignupGuard()))
 	mux.HandleFunc("/verify", verifyHandler(queries, sessions))
 	mux.HandleFunc("/refresh", refreshHandler(queries, sessions))
-	mux.HandleFunc("/search", searchHandler(queries, courses, newUSMClient()))
+	mux.HandleFunc("/search", searchHandler(queries, courses, searchClient))
 	mux.HandleFunc("/courses", coursesHandler(courses))
 	mux.HandleFunc("/watch", authMiddleware(sessions, queries, watchHandler(queries)))
 	mux.HandleFunc("/watches", authMiddleware(sessions, queries, listWatchesHandler(queries)))
 	mux.HandleFunc("/watch/delete", authMiddleware(sessions, queries, deleteWatchHandler(queries)))
-	mux.HandleFunc("/me", authMiddleware(sessions, queries, meHandler(queries)))
+	mux.HandleFunc("/me", authMiddleware(sessions, queries, meHandler(queries, admins)))
+	mux.HandleFunc("/pulse", pulseHandler(queries, courses, pcfg))
 	mux.HandleFunc("/logout", logoutHandler(queries, sessions))
+	registerAdminRoutes(mux, func(h http.HandlerFunc) http.HandlerFunc {
+		return adminMiddleware(sessions, queries, admins, h)
+	}, queries, courses, pcfg, sender)
 
 	handler := throttleMiddleware(50, rateLimitMiddleware(limiterStore, csrfMiddleware(mux)))
 

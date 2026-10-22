@@ -2,10 +2,17 @@ import type { Catalog } from "@/lib/courseIndex";
 import { apiUrl } from "./config";
 import {
   ApiError,
+  type AdminOverview,
+  type AdminSeatEvent,
+  type AdminUser,
+  type AdminUserDetail,
+  type AdminWatch,
   type ClassSection,
   type HealthResponse,
   type MeResponse,
   type MessageResponse,
+  type PulseCycle,
+  type PulseResponse,
   type SearchParams,
   type SearchResponse,
   type SeatStatus,
@@ -181,6 +188,26 @@ export const api = {
   /** Signs out on every device (the API bumps the token version). */
   logout: (signal?: AbortSignal) =>
     request<MessageResponse>("/logout", { method: "POST", auth: false, signal }),
+
+  /** Public, anonymous activity: worker cycles, USM traffic, seats that opened. */
+  pulse: (signal?: AbortSignal) => request<PulseResponse>("/pulse", { auth: false, signal }),
+
+  admin: {
+    overview: (signal?: AbortSignal) => request<AdminOverview>("/admin/overview", { signal }),
+    users: (signal?: AbortSignal) => request<AdminUser[]>("/admin/users", { signal }),
+    user: (id: number, signal?: AbortSignal) => request<AdminUserDetail>(`/admin/users/${id}`, { signal }),
+    signOutUser: (id: number) => request<MessageResponse>(`/admin/users/${id}/signout`, { method: "POST" }),
+    deleteUser: (id: number) => request<MessageResponse>(`/admin/users/${id}`, { method: "DELETE" }),
+    watches: (signal?: AbortSignal) => request<AdminWatch[]>("/admin/watches", { signal }),
+    setWatchActive: (id: number, active: boolean) =>
+      request<MessageResponse>(`/admin/watches/${id}`, { method: "PATCH", body: { active } }),
+    deleteWatch: (id: number) => request<MessageResponse>(`/admin/watches/${id}`, { method: "DELETE" }),
+    events: (limit = 200, signal?: AbortSignal) =>
+      request<AdminSeatEvent[]>("/admin/events", { query: { limit }, signal }),
+    cycles: (limit = 200, signal?: AbortSignal) =>
+      request<PulseCycle[]>("/admin/cycles", { query: { limit }, signal }),
+    testAlert: () => request<MessageResponse>("/admin/test-alert", { method: "POST" }),
+  },
 };
 
 /** Parse free-text like "MAT 101", "mat101", "CSC111" into search params. */
@@ -286,6 +313,13 @@ export function toUsmTime(raw: string): string | undefined {
 
 export { ApiError };
 export type {
+  AdminOverview,
+  AdminSeatEvent,
+  AdminUser,
+  AdminUserDetail,
+  AdminWatch,
+  PulseCycle,
+  PulseResponse,
   ClassSection,
   HealthResponse,
   MeResponse,

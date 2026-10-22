@@ -48,6 +48,8 @@ func main() {
 		log.Printf("polling real USM: term %s, every %s, at most one request per %s", cfg.Term, cfg.PollInterval, cfg.RequestGap)
 	}
 
+	go pruneActivity(ctx, queries)
+
 	// Start a cycle every PollInterval. A cycle that runs long (many watched
 	// subjects x RequestGap) is followed immediately by the next one.
 	for {
@@ -70,4 +72,15 @@ func productionFrontendURL() string {
 		log.Fatalf("FRONTEND_URL=%q: production needs the public https address, e.g. https://pingmynest.lol", u)
 	}
 	return strings.TrimRight(u, "/")
+}
+
+// pruneActivity drops old poll cycles and traffic rows once a day; seat events
+// are kept, they are the project's history.
+func pruneActivity(ctx context.Context, queries *db.Queries) {
+	for {
+		if err := queries.PruneActivity(ctx); err != nil {
+			log.Println("activity cleanup:", err)
+		}
+		time.Sleep(24 * time.Hour)
+	}
 }

@@ -6,7 +6,7 @@ import (
 	db "github.com/oscusm/PingMyNest/internal/db"
 )
 
-func meHandler(queries *db.Queries) http.HandlerFunc {
+func meHandler(queries *db.Queries, admins adminSet) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		email := emailFromContext(r)
 		if email == "" {
@@ -24,6 +24,7 @@ func meHandler(queries *db.Queries) http.HandlerFunc {
 			"id":       user.ID,
 			"email":    user.Email,
 			"verified": user.Verified.Bool,
+			"admin":    admins.has(user.Email),
 		})
 	}
 }

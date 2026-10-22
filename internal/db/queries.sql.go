@@ -11,6 +11,219 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addUSMTraffic = `-- name: AddUSMTraffic :exec
+INSERT INTO usm_traffic (hour, source, requests, cache_hits)
+VALUES (date_trunc('hour', now()), $1, $2, $3)
+ON CONFLICT (hour, source) DO UPDATE
+SET requests = usm_traffic.requests + EXCLUDED.requests,
+    cache_hits = usm_traffic.cache_hits + EXCLUDED.cache_hits
+`
+
+type AddUSMTrafficParams struct {
+	Source    string
+	Requests  int32
+	CacheHits int32
+}
+
+func (q *Queries) AddUSMTraffic(ctx context.Context, arg AddUSMTrafficParams) error {
+	_, err := q.db.Exec(ctx, addUSMTraffic, arg.Source, arg.Requests, arg.CacheHits)
+	return err
+}
+
+const adminListUsers = `-- name: AdminListUsers :many
+SELECT u.id, u.email, u.verified, u.created_at,
+       count(w.id) FILTER (WHERE w.active)::int AS active_watches,
+       count(w.id)::int AS total_watches,
+       (SELECT count(*) FROM refresh_tokens r
+         WHERE r.user_id = u.id AND r.revoked_at IS NULL AND r.expires_at > now())::int AS sessions
+FROM users u LEFT JOIN watches w ON w.user_id = u.id
+GROUP BY u.id
+ORDER BY u.created_at DESC
+`
+
+type AdminListUsersRow struct {
+	ID            int32
+	Email         string
+	Verified      pgtype.Bool
+	CreatedAt     pgtype.Timestamptz
+	ActiveWatches int32
+	TotalWatches  int32
+	Sessions      int32
+}
+
+func (q *Queries) AdminListUsers(ctx context.Context) ([]AdminListUsersRow, error) {
+	rows, err := q.db.Query(ctx, adminListUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListUsersRow
+	for rows.Next() {
+		var i AdminListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Email,
+			&i.Verified,
+			&i.CreatedAt,
+			&i.ActiveWatches,
+			&i.TotalWatches,
+			&i.Sessions,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminListWatches = `-- name: AdminListWatches :many
+SELECT w.id, w.class_nbr, w.active, w.created_at, u.id AS user_id, u.email,
+       s.subject, s.catalog_nbr, s.class_section, s.descr, s.last_enrollment_avail, s.updated_at
+FROM watches w
+JOIN users u ON u.id = w.user_id
+JOIN sections s ON s.class_nbr = w.class_nbr
+ORDER BY w.active DESC, w.created_at DESC
+`
+
+type AdminListWatchesRow struct {
+	ID                  int32
+	ClassNbr            pgtype.Int4
+	Active              pgtype.Bool
+	CreatedAt           pgtype.Timestamptz
+	UserID              int32
+	Email               string
+	Subject             string
+	CatalogNbr          string
+	ClassSection        string
+	Descr               pgtype.Text
+	LastEnrollmentAvail pgtype.Int4
+	UpdatedAt           pgtype.Timestamptz
+}
+
+func (q *Queries) AdminListWatches(ctx context.Context) ([]AdminListWatchesRow, error) {
+	rows, err := q.db.Query(ctx, adminListWatches)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListWatchesRow
+	for rows.Next() {
+		var i AdminListWatchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClassNbr,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UserID,
+			&i.Email,
+			&i.Subject,
+			&i.CatalogNbr,
+			&i.ClassSection,
+			&i.Descr,
+			&i.LastEnrollmentAvail,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminUserSessions = `-- name: AdminUserSessions :many
+SELECT id, user_agent, created_at, expires_at FROM refresh_tokens
+WHERE user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+ORDER BY created_at DESC
+`
+
+type AdminUserSessionsRow struct {
+	ID        int32
+	UserAgent pgtype.Text
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) AdminUserSessions(ctx context.Context, userID int32) ([]AdminUserSessionsRow, error) {
+	rows, err := q.db.Query(ctx, adminUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminUserSessionsRow
+	for rows.Next() {
+		var i AdminUserSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserAgent,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminUserWatches = `-- name: AdminUserWatches :many
+SELECT w.id, w.class_nbr, w.active, w.created_at,
+       s.subject, s.catalog_nbr, s.class_section, s.descr, s.last_enrollment_avail
+FROM watches w JOIN sections s ON s.class_nbr = w.class_nbr
+WHERE w.user_id = $1
+ORDER BY w.created_at DESC
+`
+
+type AdminUserWatchesRow struct {
+	ID                  int32
+	ClassNbr            pgtype.Int4
+	Active              pgtype.Bool
+	CreatedAt           pgtype.Timestamptz
+	Subject             string
+	CatalogNbr          string
+	ClassSection        string
+	Descr               pgtype.Text
+	LastEnrollmentAvail pgtype.Int4
+}
+
+func (q *Queries) AdminUserWatches(ctx context.Context, userID pgtype.Int4) ([]AdminUserWatchesRow, error) {
+	rows, err := q.db.Query(ctx, adminUserWatches, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminUserWatchesRow
+	for rows.Next() {
+		var i AdminUserWatchesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClassNbr,
+			&i.Active,
+			&i.CreatedAt,
+			&i.Subject,
+			&i.CatalogNbr,
+			&i.ClassSection,
+			&i.Descr,
+			&i.LastEnrollmentAvail,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const bumpTokenVersion = `-- name: BumpTokenVersion :one
 UPDATE users SET token_version = token_version + 1
 WHERE id = $1
@@ -127,6 +340,30 @@ DELETE FROM refresh_tokens WHERE expires_at < now() - interval '7 days'
 func (q *Queries) DeleteExpiredRefreshTokens(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, deleteExpiredRefreshTokens)
 	return err
+}
+
+const deleteUser = `-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = $1
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteWatchByID = `-- name: DeleteWatchByID :execrows
+DELETE FROM watches WHERE id = $1
+`
+
+func (q *Queries) DeleteWatchByID(ctx context.Context, id int32) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteWatchByID, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const deleteWatchByUserAndClass = `-- name: DeleteWatchByUserAndClass :exec
@@ -360,6 +597,64 @@ func (q *Queries) GetWatchesForEmail(ctx context.Context, email string) ([]GetWa
 	return items, nil
 }
 
+const insertPollCycle = `-- name: InsertPollCycle :exec
+INSERT INTO poll_cycles (started_at, duration_ms, subjects, sections_checked, usm_requests, openings, errors)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertPollCycleParams struct {
+	StartedAt       pgtype.Timestamptz
+	DurationMs      int32
+	Subjects        int32
+	SectionsChecked int32
+	UsmRequests     int32
+	Openings        int32
+	Errors          int32
+}
+
+func (q *Queries) InsertPollCycle(ctx context.Context, arg InsertPollCycleParams) error {
+	_, err := q.db.Exec(ctx, insertPollCycle,
+		arg.StartedAt,
+		arg.DurationMs,
+		arg.Subjects,
+		arg.SectionsChecked,
+		arg.UsmRequests,
+		arg.Openings,
+		arg.Errors,
+	)
+	return err
+}
+
+const insertSeatEvent = `-- name: InsertSeatEvent :exec
+INSERT INTO seat_events (class_nbr, subject, catalog_nbr, class_section, descr, seats, watchers, notified)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+`
+
+type InsertSeatEventParams struct {
+	ClassNbr     int32
+	Subject      string
+	CatalogNbr   string
+	ClassSection string
+	Descr        string
+	Seats        int32
+	Watchers     int32
+	Notified     int32
+}
+
+func (q *Queries) InsertSeatEvent(ctx context.Context, arg InsertSeatEventParams) error {
+	_, err := q.db.Exec(ctx, insertSeatEvent,
+		arg.ClassNbr,
+		arg.Subject,
+		arg.CatalogNbr,
+		arg.ClassSection,
+		arg.Descr,
+		arg.Seats,
+		arg.Watchers,
+		arg.Notified,
+	)
+	return err
+}
+
 const markTokenUsed = `-- name: MarkTokenUsed :exec
 UPDATE verification_tokens SET used = true WHERE token = $1
 `
@@ -367,6 +662,162 @@ UPDATE verification_tokens SET used = true WHERE token = $1
 func (q *Queries) MarkTokenUsed(ctx context.Context, token string) error {
 	_, err := q.db.Exec(ctx, markTokenUsed, token)
 	return err
+}
+
+const mostWatchedSections = `-- name: MostWatchedSections :many
+SELECT s.class_nbr, s.subject, s.catalog_nbr, s.class_section, s.descr, s.last_enrollment_avail,
+       count(*)::int AS watchers
+FROM watches w JOIN sections s ON s.class_nbr = w.class_nbr
+WHERE w.active
+GROUP BY s.class_nbr
+ORDER BY watchers DESC, s.subject, s.catalog_nbr
+LIMIT $1
+`
+
+type MostWatchedSectionsRow struct {
+	ClassNbr            int32
+	Subject             string
+	CatalogNbr          string
+	ClassSection        string
+	Descr               pgtype.Text
+	LastEnrollmentAvail pgtype.Int4
+	Watchers            int32
+}
+
+func (q *Queries) MostWatchedSections(ctx context.Context, limit int32) ([]MostWatchedSectionsRow, error) {
+	rows, err := q.db.Query(ctx, mostWatchedSections, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MostWatchedSectionsRow
+	for rows.Next() {
+		var i MostWatchedSectionsRow
+		if err := rows.Scan(
+			&i.ClassNbr,
+			&i.Subject,
+			&i.CatalogNbr,
+			&i.ClassSection,
+			&i.Descr,
+			&i.LastEnrollmentAvail,
+			&i.Watchers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const pollCycleTotalsSince = `-- name: PollCycleTotalsSince :one
+SELECT count(*)::int AS cycles,
+       coalesce(sum(sections_checked), 0)::bigint AS sections_checked,
+       coalesce(sum(usm_requests), 0)::bigint AS usm_requests,
+       coalesce(sum(errors), 0)::bigint AS errors,
+       coalesce(avg(duration_ms), 0)::float8 AS avg_duration_ms
+FROM poll_cycles WHERE started_at >= $1
+`
+
+type PollCycleTotalsSinceRow struct {
+	Cycles          int32
+	SectionsChecked int64
+	UsmRequests     int64
+	Errors          int64
+	AvgDurationMs   float64
+}
+
+func (q *Queries) PollCycleTotalsSince(ctx context.Context, startedAt pgtype.Timestamptz) (PollCycleTotalsSinceRow, error) {
+	row := q.db.QueryRow(ctx, pollCycleTotalsSince, startedAt)
+	var i PollCycleTotalsSinceRow
+	err := row.Scan(
+		&i.Cycles,
+		&i.SectionsChecked,
+		&i.UsmRequests,
+		&i.Errors,
+		&i.AvgDurationMs,
+	)
+	return i, err
+}
+
+const pruneActivity = `-- name: PruneActivity :exec
+WITH c AS (DELETE FROM poll_cycles WHERE started_at < now() - interval '30 days')
+DELETE FROM usm_traffic WHERE hour < now() - interval '90 days'
+`
+
+func (q *Queries) PruneActivity(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pruneActivity)
+	return err
+}
+
+const recentPollCycles = `-- name: RecentPollCycles :many
+SELECT id, started_at, duration_ms, subjects, sections_checked, usm_requests, openings, errors FROM poll_cycles ORDER BY started_at DESC LIMIT $1
+`
+
+func (q *Queries) RecentPollCycles(ctx context.Context, limit int32) ([]PollCycle, error) {
+	rows, err := q.db.Query(ctx, recentPollCycles, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PollCycle
+	for rows.Next() {
+		var i PollCycle
+		if err := rows.Scan(
+			&i.ID,
+			&i.StartedAt,
+			&i.DurationMs,
+			&i.Subjects,
+			&i.SectionsChecked,
+			&i.UsmRequests,
+			&i.Openings,
+			&i.Errors,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const recentSeatEvents = `-- name: RecentSeatEvents :many
+SELECT id, class_nbr, subject, catalog_nbr, class_section, descr, seats, watchers, notified, created_at FROM seat_events ORDER BY created_at DESC LIMIT $1
+`
+
+func (q *Queries) RecentSeatEvents(ctx context.Context, limit int32) ([]SeatEvent, error) {
+	rows, err := q.db.Query(ctx, recentSeatEvents, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeatEvent
+	for rows.Next() {
+		var i SeatEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.ClassNbr,
+			&i.Subject,
+			&i.CatalogNbr,
+			&i.ClassSection,
+			&i.Descr,
+			&i.Seats,
+			&i.Watchers,
+			&i.Notified,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const revokeAllRefreshTokensForUser = `-- name: RevokeAllRefreshTokensForUser :exec
@@ -390,6 +841,70 @@ func (q *Queries) RevokeRefreshToken(ctx context.Context, id int32) (int64, erro
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const seatEventTotalsSince = `-- name: SeatEventTotalsSince :one
+SELECT count(*)::int AS openings, coalesce(sum(notified), 0)::bigint AS alerts
+FROM seat_events WHERE created_at >= $1
+`
+
+type SeatEventTotalsSinceRow struct {
+	Openings int32
+	Alerts   int64
+}
+
+func (q *Queries) SeatEventTotalsSince(ctx context.Context, createdAt pgtype.Timestamptz) (SeatEventTotalsSinceRow, error) {
+	row := q.db.QueryRow(ctx, seatEventTotalsSince, createdAt)
+	var i SeatEventTotalsSinceRow
+	err := row.Scan(&i.Openings, &i.Alerts)
+	return i, err
+}
+
+const setWatchActive = `-- name: SetWatchActive :execrows
+UPDATE watches SET active = $2 WHERE id = $1
+`
+
+type SetWatchActiveParams struct {
+	ID     int32
+	Active pgtype.Bool
+}
+
+func (q *Queries) SetWatchActive(ctx context.Context, arg SetWatchActiveParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setWatchActive, arg.ID, arg.Active)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const uSMTrafficSince = `-- name: USMTrafficSince :many
+SELECT hour, source, requests, cache_hits FROM usm_traffic
+WHERE hour >= $1 ORDER BY hour
+`
+
+func (q *Queries) USMTrafficSince(ctx context.Context, hour pgtype.Timestamptz) ([]UsmTraffic, error) {
+	rows, err := q.db.Query(ctx, uSMTrafficSince, hour)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UsmTraffic
+	for rows.Next() {
+		var i UsmTraffic
+		if err := rows.Scan(
+			&i.Hour,
+			&i.Source,
+			&i.Requests,
+			&i.CacheHits,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const upsertSection = `-- name: UpsertSection :exec
@@ -421,6 +936,26 @@ func (q *Queries) UpsertSection(ctx context.Context, arg UpsertSectionParams) er
 	return err
 }
 
+const userTotals = `-- name: UserTotals :one
+SELECT count(*)::int AS total,
+       count(*) FILTER (WHERE verified)::int AS verified,
+       count(*) FILTER (WHERE created_at >= now() - interval '7 days')::int AS new_this_week
+FROM users
+`
+
+type UserTotalsRow struct {
+	Total       int32
+	Verified    int32
+	NewThisWeek int32
+}
+
+func (q *Queries) UserTotals(ctx context.Context) (UserTotalsRow, error) {
+	row := q.db.QueryRow(ctx, userTotals)
+	var i UserTotalsRow
+	err := row.Scan(&i.Total, &i.Verified, &i.NewThisWeek)
+	return i, err
+}
+
 const verifyUser = `-- name: VerifyUser :exec
 UPDATE users SET verified = true WHERE id = $1
 `
@@ -428,4 +963,34 @@ UPDATE users SET verified = true WHERE id = $1
 func (q *Queries) VerifyUser(ctx context.Context, id int32) error {
 	_, err := q.db.Exec(ctx, verifyUser, id)
 	return err
+}
+
+const watchTotals = `-- name: WatchTotals :one
+SELECT count(*) FILTER (WHERE w.active)::int AS active,
+       count(*) FILTER (WHERE NOT w.active)::int AS notified,
+       count(DISTINCT w.class_nbr) FILTER (WHERE w.active)::int AS sections,
+       count(DISTINCT s.subject) FILTER (WHERE w.active)::int AS subjects,
+       count(DISTINCT w.user_id)::int AS watchers
+FROM watches w JOIN sections s ON s.class_nbr = w.class_nbr
+`
+
+type WatchTotalsRow struct {
+	Active   int32
+	Notified int32
+	Sections int32
+	Subjects int32
+	Watchers int32
+}
+
+func (q *Queries) WatchTotals(ctx context.Context) (WatchTotalsRow, error) {
+	row := q.db.QueryRow(ctx, watchTotals)
+	var i WatchTotalsRow
+	err := row.Scan(
+		&i.Active,
+		&i.Notified,
+		&i.Sections,
+		&i.Subjects,
+		&i.Watchers,
+	)
+	return i, err
 }

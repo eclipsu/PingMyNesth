@@ -11,6 +11,7 @@ import { cn } from "@/lib/cn";
 
 const sectionLinks = [
   { href: "/#how-it-works", label: "How it works" },
+  { href: "/#behind-the-scenes", label: "Behind the scenes" },
   { href: "/#features", label: "Features" },
   { href: "/#faq", label: "FAQ" },
   { href: "/prereqs", label: "Prereq map" },
@@ -28,7 +29,8 @@ export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const onLanding = pathname === "/";
-  const links = onLanding ? sectionLinks : user ? appLinks : appLinks.slice(0, 2);
+  const signedInLinks = user?.admin ? [...appLinks, { href: "/admin", label: "Admin" }] : appLinks;
+  const links = onLanding ? sectionLinks : user ? signedInLinks : appLinks.slice(0, 2);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -86,6 +88,11 @@ export function Navbar() {
             <div className="skeleton h-9 w-32 rounded-lg" />
           ) : user ? (
             <>
+              {onLanding && user.admin ? (
+                <Link href="/admin" className="btn btn-ghost btn-sm">
+                  Admin
+                </Link>
+              ) : null}
               {onLanding ? (
                 <Link href="/watches" className="btn btn-ghost btn-sm">
                   My watches
@@ -131,7 +138,7 @@ export function Navbar() {
             className="overflow-hidden md:hidden"
           >
             <div className="space-y-1 px-4 pb-5 pt-1">
-              {[...links, ...(onLanding && user ? appLinks : [])]
+              {[...links, ...(onLanding && user ? signedInLinks : [])]
                 .filter((link, i, all) => all.findIndex((l) => l.href === link.href) === i)
                 .map((link) => (
                 <Link

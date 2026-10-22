@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -44,6 +45,16 @@ type Client struct {
 
 	cacheMu sync.Mutex
 	cache   map[string]cached
+
+	// counted since the last TakeCounts, for the activity stats
+	requests  atomic.Int64
+	cacheHits atomic.Int64
+}
+
+// TakeCounts returns how many requests went to USM and how many searches the
+// cache answered since the previous call, and resets both.
+func (c *Client) TakeCounts() (requests, cacheHits int64) {
+	return c.requests.Swap(0), c.cacheHits.Swap(0)
 }
 
 type cached struct {
@@ -74,6 +85,7 @@ func NewClient(searchURL, warmUpURL, userAgent string, gap, cacheTTL time.Durati
 func (c *Client) Search(ctx context.Context, q url.Values) (*SearchResponse, error) {
 	key := q.Encode()
 	if res, ok := c.fromCache(key); ok {
+		c.cacheHits.Add(1)
 		return res, nil
 	}
 
@@ -81,6 +93,7 @@ func (c *Client) Search(ctx context.Context, q url.Values) (*SearchResponse, err
 	defer c.mu.Unlock()
 	// another caller may have filled it while we waited for the lock
 	if res, ok := c.fromCache(key); ok {
+		c.cacheHits.Add(1)
 		return res, nil
 	}
 
@@ -146,6 +159,7 @@ func (c *Client) get(ctx context.Context, rawURL string) (*http.Response, error)
 		}
 	}
 	c.lastReq = time.Now()
+	c.requests.Add(1)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {

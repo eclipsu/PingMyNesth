@@ -14,6 +14,17 @@ export { getApiConfig, apiUrl } from "./config";
 export { ApiError } from "./client";
 export type { ApiConfig } from "./config";
 export type {
+  AdminOverview,
+  AdminSeatEvent,
+  AdminSession,
+  AdminUser,
+  AdminUserDetail,
+  AdminWatch,
+  PulseCycle,
+  PulseHour,
+  PulseOpening,
+  PulseResponse,
+  PulseTotals,
   ClassSection,
   HealthResponse,
   MeResponse,
