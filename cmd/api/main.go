@@ -61,6 +61,9 @@ func main() {
 	go recordSearchTraffic(queries, searchClient)
 	pcfg := loadPulseConfig()
 	admins := loadAdmins()
+	if len(admins) == 0 {
+		log.Println("ADMIN_EMAILS not set: /admin is closed to everyone")
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)

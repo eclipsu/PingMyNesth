@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -15,14 +16,13 @@ import (
 	"github.com/oscusm/PingMyNest/internal/notify"
 )
 
-// defaultAdmins is used when ADMIN_EMAILS (comma-separated) isn't set.
-const defaultAdmins = "therajeevshrestha@gmail.com"
-
 type adminSet map[string]bool
 
+// loadAdmins reads ADMIN_EMAILS (comma-separated). Unset means nobody can
+// open /admin.
 func loadAdmins() adminSet {
 	set := adminSet{}
-	for _, e := range strings.Split(getEnvOrDefault("ADMIN_EMAILS", defaultAdmins), ",") {
+	for _, e := range strings.Split(os.Getenv("ADMIN_EMAILS"), ",") {
 		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
 			set[e] = true
 		}

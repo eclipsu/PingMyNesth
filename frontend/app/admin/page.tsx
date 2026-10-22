@@ -47,9 +47,7 @@ function AdminInner() {
           <ShieldAlert className="h-5 w-5" aria-hidden />
         </span>
         <h1 className="mt-6 text-4xl font-bold">Admins only</h1>
-        <p className="mt-3 text-muted">
-          {user.email} doesn&apos;t have access to the admin panel.
-        </p>
+        <p className="mt-3 text-muted">This account doesn&apos;t have access to the admin panel.</p>
         <Link href="/watches" className="btn btn-primary mt-8">
           Back to your nest
         </Link>
