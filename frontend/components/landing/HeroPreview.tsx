@@ -10,15 +10,14 @@ type Row = {
   code: string;
   section: string;
   title: string;
-  prof: string;
   avail: number;
   cap: number;
 };
 
 const rows: Row[] = [
-  { code: "CSC 101", section: "003", title: "Computer Science I", prof: "Dr. Rahimi", avail: 0, cap: 30 },
-  { code: "MAT 167", section: "H01", title: "Calculus I", prof: "Dr. Nguyen", avail: 1, cap: 35 },
-  { code: "ENG 102", section: "012", title: "Composition II", prof: "Prof. Hayes", avail: 0, cap: 24 },
+  { code: "CSC 101", section: "003", title: "Computer Science I", avail: 0, cap: 30 },
+  { code: "MAT 167", section: "H01", title: "Calculus I", avail: 1, cap: 35 },
+  { code: "ENG 102", section: "012", title: "Composition II", avail: 0, cap: 24 },
 ];
 
 function status(avail: number): SeatStatus {
@@ -109,7 +108,7 @@ export function HeroPreview() {
                     <span className="font-mono text-xs text-white/40">§{row.section}</span>
                   </div>
                   <p className="mt-1.5 truncate text-sm text-white/60">
-                    {row.title} · {row.prof}
+                    {row.title}
                   </p>
                 </div>
 

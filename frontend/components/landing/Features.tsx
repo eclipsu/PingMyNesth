@@ -47,7 +47,7 @@ export function Features() {
                 </div>
                 <p className="mt-3 font-semibold text-ink">A seat opened in CSC 101 §003</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted">
-                  Computer Science I with Dr. Rahimi now has 2 open seats. Seats go fast during
+                  Computer Science I now has 2 open seats. Seats go fast during
                   registration, so head to SOAR now.
                 </p>
                 <span className="btn btn-accent btn-sm mt-4">Open SOAR</span>

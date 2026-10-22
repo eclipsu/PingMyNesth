@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { LegalSection, ReviewNote } from "@/components/legal/ReviewNote";
+import { LegalSection } from "@/components/legal/ReviewNote";
 
 export const metadata: Metadata = {
   title: "Terms & Conditions | Ping My Nest",
@@ -27,13 +27,7 @@ export default function TermsPage() {
             source of truth.
           </p>
           <p className="mt-3 text-sm text-muted">
-            Last updated: <ReviewNote>effective date</ReviewNote>
-          </p>
-          <p className="mt-6 text-sm leading-relaxed text-ink-2">
-            <ReviewNote>
-              this is a starting template, not legal advice. Have it reviewed before launch,
-              especially the liability and governing-law sections.
-            </ReviewNote>
+            Last updated: October 22, 2026
           </p>
 
           <LegalSection title="Using Ping My Nest">
@@ -44,8 +38,7 @@ export default function TermsPage() {
             </p>
             <p>
               Ping My Nest is a student project and is not operated by, endorsed by, or affiliated
-              with the University of Southern Mississippi.{" "}
-              <ReviewNote>operator name, if different from &quot;Ping My Nest&quot;</ReviewNote>
+              with the University of Southern Mississippi. Ping My Nest is operated by oscusm.
             </p>
           </LegalSection>
 
@@ -87,13 +80,13 @@ export default function TermsPage() {
             <p>
               Ping My Nest is provided &quot;as is&quot; without warranties of any kind. To the
               fullest extent allowed by law, we are not liable for any damages arising from your use
-              of the service. <ReviewNote>have this section reviewed</ReviewNote>
+              of the service.
             </p>
           </LegalSection>
 
           <LegalSection title="Governing law">
             <p>
-              These terms are governed by the laws of <ReviewNote>state, e.g. Mississippi</ReviewNote>.
+              These terms are governed by the laws of the State of Mississippi.
             </p>
           </LegalSection>
 
@@ -103,7 +96,11 @@ export default function TermsPage() {
               <Link href="/privacy" className={linkClass}>
                 Privacy Policy
               </Link>
-              . Questions about these terms: <ReviewNote>contact email</ReviewNote>.
+              . Questions about these terms? Open an issue on{" "}
+              <a href="https://github.com/oscusm/PingMyNest/issues" className={linkClass} target="_blank" rel="noopener noreferrer">
+                GitHub
+              </a>
+              .
             </p>
           </LegalSection>
         </article>

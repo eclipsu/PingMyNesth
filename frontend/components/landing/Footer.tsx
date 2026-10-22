@@ -64,7 +64,7 @@ export function Footer() {
         </div>
       </div>
       <div className="mx-auto flex max-w-6xl flex-col gap-2 border-t border-white/10 px-4 py-6 text-sm text-white/50 sm:flex-row sm:justify-between sm:px-6">
-        <p>© {new Date().getFullYear()} Ping My Nest</p>
+        <p>© {new Date().getFullYear()} oscusm · Ping My Nest</p>
         <p>Made by USM students.</p>
       </div>
     </footer>

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { LegalSection, ReviewNote } from "@/components/legal/ReviewNote";
+import { LegalSection } from "@/components/legal/ReviewNote";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Ping My Nest",
@@ -28,15 +28,15 @@ export default function PrivacyPage() {
             Built for USM students. We keep data collection minimal.
           </p>
           <p className="mt-3 text-sm text-muted">
-            Last updated: <ReviewNote>effective date</ReviewNote>
+            Last updated: October 22, 2026
           </p>
 
           <LegalSection title="Who we are">
             <p>
               Ping My Nest is a student-built project that alerts University of Southern
               Mississippi students when a seat opens in a class section. It is not operated by or
-              affiliated with the University of Southern Mississippi.{" "}
-              <ReviewNote>legal name of the operator (you, a student org, or a company)</ReviewNote>
+              affiliated with the University of Southern Mississippi. Ping My Nest is operated by
+              oscusm.
             </p>
           </LegalSection>
 
@@ -74,15 +74,16 @@ export default function PrivacyPage() {
               access cookie (15 minutes) and a refresh cookie (30 days, renewed while you use the
               site). Both are httpOnly, so scripts on the page can&apos;t read them. Signing out
               ends your session on every device. We don&apos;t use advertising or analytics
-              cookies. <ReviewNote>update this if you add analytics</ReviewNote>
+              cookies.
             </p>
           </LegalSection>
 
           <LegalSection title="Server logs and rate limiting">
             <p>
               To protect the service and USM systems, our API rate-limits requests by IP address.
-              IP addresses are held in memory for this purpose and are not tied to your account.{" "}
-              <ReviewNote>confirm what your host (e.g. Vercel, Fly.io) logs and for how long</ReviewNote>
+              IP addresses are held in memory for this purpose and are not tied to your account. Our
+              hosting providers (Vercel for the website, AWS for the API) may keep standard request
+              logs under their own policies.
             </p>
           </LegalSection>
 
@@ -90,30 +91,35 @@ export default function PrivacyPage() {
             <p>
               We don&apos;t sell your data. Alert and sign-in emails are delivered through a
               third-party email relay, which receives your email address and the message
-              content. <ReviewNote>confirm the provider (currently Resend, resend.com) and link its privacy policy</ReviewNote>
+              content: currently{" "}
+              <a href="https://resend.com/legal/privacy-policy" className={linkClass} target="_blank" rel="noopener noreferrer">
+                Resend
+              </a>
+              .
             </p>
           </LegalSection>
 
           <LegalSection title="How long we keep it">
             <p>
-              We keep your email and watches while your account is active.{" "}
-              <ReviewNote>set a retention period, e.g. delete inactive accounts after a semester</ReviewNote>
+              We keep your email and watches while your account is active, or until you ask us to
+              delete them.
             </p>
           </LegalSection>
 
           <LegalSection title="Your choices">
             <p>
               You can stop any watch from your watches page. To delete your account and all
-              associated data, contact us at <ReviewNote>contact email</ReviewNote> and we will
-              remove it.
+              associated data, open an issue on{" "}
+              <a href="https://github.com/oscusm/PingMyNest/issues" className={linkClass} target="_blank" rel="noopener noreferrer">
+                GitHub
+              </a> and we will remove it.
             </p>
           </LegalSection>
 
           <LegalSection title="University guidance">
             <p>
               Class availability information used by Ping My Nest is publicly available. USM
-              Information Security provided the following guidance:{" "}
-              <ReviewNote>confirm this is an exact quote you have permission to publish</ReviewNote>
+              Information Security provided the following guidance:
             </p>
             <blockquote className="space-y-3 border-l-2 border-accent pl-5 leading-relaxed text-muted">
               <p>
