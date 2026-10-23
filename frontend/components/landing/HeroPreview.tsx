@@ -91,9 +91,11 @@ export function HeroPreview() {
     const fetchCourse = async (code: string) => {
       try {
         const res = await api.search(parse(code), controller.signal);
-        const section = pickSection(res.classes);
-        if (cancelled || !section) return;
         const prev = rowsRef.current[code];
+        // stay on the section we picked first, so an opening shows as a change
+        const section =
+          res.classes.find((c) => c.class_nbr === prev?.section.class_nbr) ?? pickSection(res.classes);
+        if (cancelled || !section) return;
         const changed =
           prev && prev.section.class_nbr === section.class_nbr && prev.section.enrollment_available !== section.enrollment_available
             ? Date.now()
