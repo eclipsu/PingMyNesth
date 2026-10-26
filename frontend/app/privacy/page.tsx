@@ -1,15 +1,15 @@
-import type { Metadata } from "next";
+import { pageMeta } from "@/lib/site";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { LegalSection } from "@/components/legal/ReviewNote";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy | Ping My Nest",
-  description:
-    "What Ping My Nest stores, and how we use public USM class search data.",
-};
+export const metadata = pageMeta({
+  title: "Privacy Policy",
+  description: "What Ping My Nest stores, and how we use public USM class search data.",
+  path: "/privacy",
+});
 
 const linkClass =
   "font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-accent";

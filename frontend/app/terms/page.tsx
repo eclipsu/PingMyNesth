@@ -1,13 +1,14 @@
-import type { Metadata } from "next";
+import { pageMeta } from "@/lib/site";
 import Link from "next/link";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { LegalSection } from "@/components/legal/ReviewNote";
 
-export const metadata: Metadata = {
-  title: "Terms & Conditions | Ping My Nest",
+export const metadata = pageMeta({
+  title: "Terms & Conditions",
   description: "The terms for using Ping My Nest seat alerts.",
-};
+  path: "/terms",
+});
 
 const linkClass =
   "font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-accent";

@@ -7,6 +7,8 @@ const columns = [
     links: [
       { href: "/search", label: "Search classes" },
       { href: "/schedule", label: "Schedule builder" },
+      { href: "/courses", label: "All USM courses" },
+      { href: "/notify-when-class-opens", label: "Get notified when a class opens" },
       { href: "/watches", label: "My watches" },
       { href: "/#how-it-works", label: "How it works" },
       { href: "/#faq", label: "FAQ" },
