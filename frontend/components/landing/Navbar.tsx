@@ -14,6 +14,7 @@ const sectionLinks = [
   { href: "/#behind-the-scenes", label: "Behind the scenes" },
   { href: "/#features", label: "Features" },
   { href: "/#faq", label: "FAQ" },
+  { href: "/schedule", label: "Schedule builder" },
   { href: "/prereqs", label: "Prereq map" },
 ];
 

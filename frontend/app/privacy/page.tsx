@@ -76,6 +76,11 @@ export default function PrivacyPage() {
               ends your session on every device. We don&apos;t use advertising or analytics
               cookies.
             </p>
+            <p>
+              The schedule builder saves your plan (the courses you add, the times you block out,
+              and your favorites) in your browser&apos;s local storage on that device. It is never
+              sent to our servers, and clearing your browser data or pressing Clear all deletes it.
+            </p>
           </LegalSection>
 
           <LegalSection title="Server logs and rate limiting">

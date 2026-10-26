@@ -14,7 +14,7 @@ const faqs = [
   },
   {
     q: "What data do you store?",
-    a: "Only your verified email and the class sections you watch. Seat counts come from USM's public Class Search; we never access your SOAR login. Details are on the Privacy page.",
+    a: "Only your verified email and the class sections you watch. Your schedule builder plan stays in your browser. Seat counts come from USM's public Class Search; we never access your SOAR login. Details are on the Privacy page.",
   },
   {
     q: "Is Ping My Nest only for USM?",
@@ -22,7 +22,15 @@ const faqs = [
   },
   {
     q: "Is it free?",
-    a: "Yes. Search, watching, and seat alerts are free for USM students.",
+    a: "Yes. Search, the schedule builder, watching, and seat alerts are free for USM students.",
+  },
+  {
+    q: "How does the schedule builder work?",
+    a: "Add the courses you need, from Search or right in the builder. We try every combination of sections and show the ones with no time clashes, ranked by what you favor: starred sections, favorite professors, time of day and days off. Drag on the calendar to block out work or anything else, and classes that overlap it are swapped for another section. You can lock a section, drop a course, and see your total credits as you go.",
+  },
+  {
+    q: "Do I need an account for the schedule builder?",
+    a: "No. Your schedule is saved in your browser on this device, not on our servers, so it won't follow you to another device. You only need to sign in to get seat alerts for a section.",
   },
   {
     q: "How fast are alerts?",

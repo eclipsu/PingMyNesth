@@ -1,8 +1,32 @@
 "use client";
 
+import Link from "next/link";
 import { Check, Lock, Mail, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { SeatBadge } from "@/components/ui/Seats";
 import { FadeIn } from "./FadeIn";
+
+// A sample week for the schedule builder card: classes on the hour grid
+// (8 AM start, 1 row = 30 min) plus one commitment the student drew in.
+const PREVIEW_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const PREVIEW_BLOCKS = [
+  { day: 0, row: 2, span: 2, label: "MAT 167", tone: "gold" },
+  { day: 2, row: 2, span: 2, label: "MAT 167", tone: "gold" },
+  { day: 4, row: 2, span: 2, label: "MAT 167", tone: "gold" },
+  { day: 1, row: 3, span: 3, label: "CSC 101", tone: "ink" },
+  { day: 3, row: 3, span: 3, label: "CSC 101", tone: "ink" },
+  { day: 1, row: 10, span: 3, label: "ENG 102", tone: "soft" },
+  { day: 3, row: 10, span: 3, label: "ENG 102", tone: "soft" },
+  { day: 0, row: 9, span: 8, label: "Work", tone: "busy" },
+  { day: 2, row: 9, span: 8, label: "Work", tone: "busy" },
+] as const;
+const PREVIEW_ROWS = 18;
+
+const toneClass = {
+  gold: "bg-accent text-ink border-accent-hover",
+  ink: "bg-ink text-white border-ink",
+  soft: "bg-accent-soft text-ink border-accent-ink",
+  busy: "text-ink border-ink/25 bg-[repeating-linear-gradient(135deg,var(--subtle)_0_6px,var(--line-strong)_6px_12px)]",
+} as const;
 
 export function Features() {
   return (
@@ -121,6 +145,75 @@ export function Features() {
                   ),
                 )}
               </ul>
+            </article>
+          </div>
+
+          <div className="md:col-span-6">
+            <article className="grid h-full overflow-hidden rounded-lg border border-line bg-surface md:grid-cols-[1fr_1.15fr]">
+              <div className="flex flex-col p-7 sm:p-8">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-accent-ink">New</p>
+                <h3 className="mt-3 text-xl font-bold text-ink">Build your whole week</h3>
+                <p className="mt-2 max-w-md text-[15px] leading-relaxed text-muted">
+                  Add the courses you need and we line up every schedule that fits, without
+                  clashes. Drag on the calendar to block out work, practice or anything else, and
+                  sections that collide get swapped for one that doesn&apos;t.
+                </p>
+                <ul className="mt-5 space-y-2 text-[15px] text-ink-2">
+                  {[
+                    "Star sections and professors you like, pick mornings or Fridays off",
+                    "Lock a section, drop a course, see total credits as you go",
+                    "Ping any full section right from your schedule",
+                  ].map((t) => (
+                    <li key={t} className="flex gap-2.5">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 bg-accent" aria-hidden />
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/schedule" className="btn btn-primary mt-7 self-start">
+                  Open the schedule builder
+                </Link>
+              </div>
+
+              <div className="border-t border-line bg-subtle p-5 sm:p-7 md:border-l md:border-t-0" aria-hidden>
+                <div className="overflow-hidden rounded border border-line bg-surface">
+                  <div className="grid grid-cols-5 border-b border-line">
+                    {PREVIEW_DAYS.map((d) => (
+                      <p
+                        key={d}
+                        className="border-l border-line py-2 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-muted first:border-l-0"
+                      >
+                        {d}
+                      </p>
+                    ))}
+                  </div>
+                  <div
+                    className="relative grid grid-cols-5"
+                    style={{
+                      gridTemplateRows: `repeat(${PREVIEW_ROWS}, 0.85rem)`,
+                      backgroundImage: "linear-gradient(var(--line) 1px, transparent 1px)",
+                      backgroundSize: "100% 1.7rem",
+                    }}
+                  >
+                    {PREVIEW_DAYS.map((d, i) => (
+                      <div
+                        key={d}
+                        className="border-l border-line first:border-l-0"
+                        style={{ gridColumn: i + 1, gridRow: `1 / span ${PREVIEW_ROWS}` }}
+                      />
+                    ))}
+                    {PREVIEW_BLOCKS.map((b) => (
+                      <div
+                        key={`${b.day}-${b.row}`}
+                        className={`z-10 mx-1 overflow-hidden rounded-[3px] border px-1.5 py-0.5 text-[10px] font-bold leading-tight ${toneClass[b.tone]}`}
+                        style={{ gridColumn: b.day + 1, gridRow: `${b.row} / span ${b.span}` }}
+                      >
+                        {b.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </article>
           </div>
         </FadeIn>
