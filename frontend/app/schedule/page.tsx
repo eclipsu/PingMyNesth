@@ -7,7 +7,13 @@ import { toast } from "sonner";
 import { Navbar } from "@/components/landing/Navbar";
 import { CourseCombobox } from "@/components/search/CourseCombobox";
 import { SectionDetailModal } from "@/components/search/SectionDetailModal";
-import { COURSE_COLORS, WeekCalendar, type CalendarEvent, type CourseColor } from "@/components/schedule/WeekCalendar";
+import {
+  CLASH_COLORS,
+  COURSE_COLORS,
+  WeekCalendar,
+  type CalendarEvent,
+  type CourseColor,
+} from "@/components/schedule/WeekCalendar";
 import { SeatBadge } from "@/components/ui/Seats";
 import { scheduleActions, useSchedulePlan, type SchedulePlan } from "@/hooks/useSchedulePlan";
 import { usePingApi, type UsePingApi } from "@/hooks/usePingApi";
@@ -15,23 +21,24 @@ import { cn } from "@/lib/cn";
 import { ApiError, formatDays, formatTimeRange, parseCourseQuery, seatStatus, type ClassSection } from "@/lib/api";
 import {
   ASSUMED_CREDITS,
+  CAMPUSES,
   DAY_LABELS,
   WEEKDAYS,
   buildSchedules,
   courseKey,
   formatClock,
   instructorName,
+  isOnline,
+  overlaps,
+  sectionClashes,
   sectionCredits,
   sectionSlots,
+  sectionsForCampus,
+  type Clash,
   type PlannedCourse,
+  type Slot,
   type TimeOfDay,
 } from "@/lib/schedule";
-
-const CAMPUSES = [
-  { value: "HBG", label: "Hattiesburg" },
-  { value: "GULF", label: "Gulf Park" },
-  { value: "ONLINE", label: "Online" },
-] as const;
 
 const TIMES: { value: TimeOfDay; label: string; hint: string }[] = [
   { value: "morning", label: "Morning", hint: "before noon" },
@@ -58,10 +65,16 @@ export default function SchedulePage() {
   const [detail, setDetail] = useState<ClassSection | null>(null);
   const [pinging, setPinging] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // section hovered in a course list, drawn over the week with its clashes
+  const [preview, setPreview] = useState<ClassSection | null>(null);
 
   const result = useMemo(
-    () => buildSchedules(plan.courses, plan.commitments, plan.favorites, { onlyOpen: plan.onlyOpen }),
-    [plan.courses, plan.commitments, plan.favorites, plan.onlyOpen],
+    () =>
+      buildSchedules(plan.courses, plan.commitments, plan.favorites, {
+        onlyOpen: plan.onlyOpen,
+        includeOnline: plan.includeOnline,
+      }),
+    [plan.courses, plan.commitments, plan.favorites, plan.onlyOpen, plan.includeOnline],
   );
   // stay on the schedule being viewed while it's still valid after an edit
   const found = pickedSig ? result.schedules.findIndex((s) => signature(s.picks) === pickedSig) : -1;
@@ -72,17 +85,46 @@ export default function SchedulePage() {
     if (next) setPickedSig(signature(next.picks));
   };
 
+  // when nothing fits, courses that overlap share their clash group's color
+  const clashGroupOf = useMemo(() => {
+    const map = new Map<string, number>();
+    result.clashView?.groups.forEach((g, i) => g.forEach((k) => map.set(k, i)));
+    return map;
+  }, [result.clashView]);
   const colorOf = useMemo(() => {
     const map = new Map<string, CourseColor>();
     plan.courses.forEach((c, i) => map.set(c.key, COURSE_COLORS[i % COURSE_COLORS.length]));
-    return (key: string) => map.get(key) ?? COURSE_COLORS[0];
-  }, [plan.courses]);
+    return (key: string) => {
+      const g = clashGroupOf.get(key);
+      return g === undefined ? (map.get(key) ?? COURSE_COLORS[0]) : CLASH_COLORS[g % CLASH_COLORS.length];
+    };
+  }, [plan.courses, clashGroupOf]);
+  const clashPartners = (key: string) =>
+    result.clashView?.groups.find((g) => g.includes(key))?.filter((k) => k !== key) ?? [];
+
+  const crossOut = (key: string) => {
+    scheduleActions.toggleDropped(key);
+    toast(`Crossed out ${key}`, { action: { label: "Undo", onClick: () => scheduleActions.undo() } });
+  };
 
   const watched = useMemo(() => new Set((watches ?? []).filter((w) => w.active).map((w) => w.class_nbr)), [watches]);
 
   useEffect(() => {
     if (user) void listWatches().catch(() => {});
   }, [user, listWatches]);
+
+  // Ctrl/⌘+Z steps back through plan changes; text fields keep their own undo
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== "z") return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("input, textarea, select, [contenteditable='true']")) return;
+      e.preventDefault();
+      if (!scheduleActions.undo()) toast("Nothing to undo", { id: "undo" });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Refresh seat counts for saved courses, one request at a time. Each
   // refresh changes plan.courses and restarts this loop, which skips the
@@ -95,8 +137,9 @@ export default function SchedulePage() {
         if (refreshedThisVisit.has(c.key)) continue;
         refreshedThisVisit.add(c.key);
         try {
-          const res = await search({ subject: c.subject, catalog_nbr: c.catalog_nbr, campus: c.campus });
-          scheduleActions.refreshSections(c.key, res.classes ?? []);
+          // one request for every campus, then keep this course's campus plus online
+          const res = await search({ subject: c.subject, catalog_nbr: c.catalog_nbr });
+          scheduleActions.refreshSections(c.key, sectionsForCampus(res.classes ?? [], c.campus));
         } catch {
           clearError();
           /* keep the saved copy; seats may just be a little stale */
@@ -133,18 +176,57 @@ export default function SchedulePage() {
     }
   };
 
-  const events: CalendarEvent[] = (current?.picks ?? []).flatMap((s) =>
-    sectionSlots(s).map((slot) => ({
-      ...slot,
-      id: `${s.class_nbr}-${slot.day}-${slot.start}`,
-      title: `${courseKey(s)} §${s.class_section}`,
-      subtitle: instructorName(s) ?? "Staff",
-      color: colorOf(courseKey(s)),
-      muted: seatStatus(s) === "FULL",
-      onClick: () => setDetail(s),
-    })),
-  );
-  const unscheduled = (current?.picks ?? []).filter((s) => sectionSlots(s).length === 0);
+  // no schedule fits: draw the closest week instead, overlaps and all
+  const picks = current?.picks ?? result.clashView?.picks ?? [];
+  const clashesOf = (s: ClassSection) => sectionClashes(s, picks, plan.commitments);
+  const shownPreview = preview && !picks.some((p) => p.class_nbr === preview.class_nbr) ? preview : null;
+  const previewSlots = shownPreview ? sectionSlots(shownPreview) : [];
+  const previewKey = shownPreview ? courseKey(shownPreview) : null;
+  const hitsPreview = (slot: Slot) => previewSlots.some((p) => overlaps(p, slot));
+  /** what one meeting of the previewed section runs into */
+  const blockersAt = (slot: Slot) => [
+    ...new Set([
+      ...picks
+        .filter((p) => courseKey(p) !== previewKey && sectionSlots(p).some((b) => overlaps(b, slot)))
+        .map((p) => `${courseKey(p)} §${p.class_section}`),
+      ...plan.commitments.filter((c) => overlaps(c, slot)).map((c) => c.label || "Busy"),
+    ]),
+  ];
+
+  const events: CalendarEvent[] = [
+    ...picks.flatMap((s) => {
+      const key = courseKey(s);
+      const partners = clashPartners(key);
+      return sectionSlots(s).map((slot) => ({
+        ...slot,
+        id: `${s.class_nbr}-${slot.day}-${slot.start}`,
+        // clashing blocks sit side by side at half width: keep them short, the color says the rest
+        title: partners.length ? key : `${key} §${s.class_section}`,
+        subtitle: partners.length
+          ? `${formatClock(slot.start, true)}–${formatClock(slot.end, true)}`
+          : (instructorName(s) ?? "Staff"),
+        color: colorOf(key),
+        muted: seatStatus(s) === "FULL",
+        conflict: partners.length > 0,
+        clash: key !== previewKey && hitsPreview(slot),
+        onCrossOut: partners.length ? () => crossOut(key) : undefined,
+        onClick: () => setDetail(s),
+      }));
+    }),
+    ...previewSlots.map((slot) => {
+      const blockers = blockersAt(slot);
+      return {
+        ...slot,
+        id: `preview-${slot.day}-${slot.start}`,
+        title: `${previewKey} §${shownPreview!.class_section}`,
+        subtitle: blockers.length ? `Clashes with ${blockers.join(", ")}` : "Fits here",
+        color: colorOf(previewKey!),
+        ghost: true,
+        clash: blockers.length > 0,
+      };
+    }),
+  ];
+  const clashingCommitments = new Set(plan.commitments.filter(hitsPreview).map((c) => c.id));
 
   const active = plan.courses.filter((c) => !c.dropped);
   const creditsGuess = active.reduce((sum, c) => sum + (sectionCredits(c.sections[0]) ?? ASSUMED_CREDITS), 0);
@@ -161,8 +243,8 @@ export default function SchedulePage() {
             <div>
               <h1 className="text-5xl font-bold text-ink sm:text-6xl">Schedule builder</h1>
               <p className="mt-2 max-w-xl text-muted">
-                Add courses, block out the times you&apos;re busy, star what you like. We line up every schedule
-                that fits, with your favorites first.
+                Add your classes, block off the hours you work or practice, and flip through every week that
+                fits.
               </p>
             </div>
             <CreditMeter credits={credits} estimated={estimated} courses={current?.picks.length ?? active.length} />
@@ -184,7 +266,7 @@ export default function SchedulePage() {
                     className="text-xs font-semibold text-muted hover:text-full"
                     onClick={() => {
                       scheduleActions.clearAll();
-                      toast("Schedule cleared");
+                      toast("Schedule cleared", { action: { label: "Undo", onClick: () => scheduleActions.undo() } });
                     }}
                   >
                     Clear all
@@ -210,6 +292,10 @@ export default function SchedulePage() {
                       picked={pickFor(c.key)}
                       favorites={plan.favorites}
                       blocked={result.blocked.find((b) => b.key === c.key)?.reason}
+                      clashesWith={c.dropped ? [] : clashPartners(c.key)}
+                      onCrossOut={() => crossOut(c.key)}
+                      clashesOf={clashesOf}
+                      onPreview={setPreview}
                       watched={watched}
                       open={expanded === c.key}
                       onToggle={() => setExpanded((k) => (k === c.key ? null : c.key))}
@@ -238,7 +324,9 @@ export default function SchedulePage() {
                 <h2 className="min-w-44 text-center text-2xl font-bold text-ink" aria-live="polite">
                   {result.schedules.length
                     ? `Schedule ${index + 1} of ${result.truncated ? `${result.schedules.length}+` : result.schedules.length}`
-                    : "No schedule yet"}
+                    : result.clashView
+                      ? "Doesn't fit yet"
+                      : "No schedule yet"}
                 </h2>
                 <button
                   type="button"
@@ -264,16 +352,15 @@ export default function SchedulePage() {
               onAddCommitment={scheduleActions.addCommitment}
               onUpdateCommitment={scheduleActions.updateCommitment}
               onRemoveCommitment={scheduleActions.removeCommitment}
+              clashingCommitments={clashingCommitments}
             />
             <p className="text-xs text-muted">
-              Drag on empty space to block out work, practice or anything else; classes that clash get swapped
-              for another section. Drag a block to move it, pull its bottom edge to resize.
+              Drag on the grid to block off time. Drag a block to move it, or its bottom edge to resize. Ctrl+Z undoes.
             </p>
 
             {current ? (
               <ScheduleTable
                 picks={current.picks}
-                unscheduled={unscheduled}
                 plan={plan}
                 colorOf={colorOf}
                 watched={watched}
@@ -348,8 +435,8 @@ function AddCourse({
     }
     setLoading(true);
     try {
-      const res = await search({ subject: parsed.subject, catalog_nbr: parsed.catalog_nbr, campus });
-      const list = res.classes ?? [];
+      const res = await search({ subject: parsed.subject, catalog_nbr: parsed.catalog_nbr });
+      const list = sectionsForCampus(res.classes ?? [], campus);
       if (!list.length) {
         toast(`No ${parsed.subject} ${parsed.catalog_nbr} sections at that campus this term`);
         return;
@@ -418,6 +505,10 @@ function CourseCard({
   picked,
   favorites,
   blocked,
+  clashesWith,
+  onCrossOut,
+  clashesOf,
+  onPreview,
   watched,
   open,
   onToggle,
@@ -429,6 +520,11 @@ function CourseCard({
   picked: ClassSection | null;
   favorites: SchedulePlan["favorites"];
   blocked?: string;
+  /** courses this one overlaps in the closest week (only when nothing fits) */
+  clashesWith: string[];
+  onCrossOut: () => void;
+  clashesOf: (s: ClassSection) => Clash[];
+  onPreview: (s: ClassSection | null) => void;
   watched: Set<number>;
   open: boolean;
   onToggle: () => void;
@@ -457,15 +553,28 @@ function CourseCard({
           </span>
           <span className="mt-0.5 block truncate text-xs text-ink-2">{c.descr}</span>
           {c.dropped ? (
-            <span className="mt-1 block text-xs font-semibold text-muted">Dropped: not in any schedule</span>
+            <span className="mt-1 block text-xs font-semibold text-muted">Crossed out</span>
           ) : blocked ? (
             <span className="mt-1 block text-xs font-medium text-full">{blocked}</span>
+          ) : clashesWith.length ? (
+            <span className="mt-1 block text-xs font-medium" style={{ color: color.text }}>
+              Clashes with {clashesWith.join(", ")}
+            </span>
           ) : picked ? (
             <span className="mt-1 block truncate text-xs text-muted">
-              §{picked.class_section} · {formatDays(picked.days) ?? "Online"} {formatTimeRange(picked.start_time, picked.end_time) ?? ""}
+              §{picked.class_section} · {formatDays(picked.days) ?? (isOnline(picked) ? "Online" : "Time TBA")} {formatTimeRange(picked.start_time, picked.end_time) ?? ""}
             </span>
           ) : null}
         </button>
+        {clashesWith.length ? (
+          <button
+            type="button"
+            onClick={onCrossOut}
+            className="shrink-0 rounded border border-line-strong px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-ink-2 hover:border-ink hover:text-ink"
+          >
+            Cross out
+          </button>
+        ) : null}
       </div>
 
       {open ? (
@@ -476,13 +585,13 @@ function CourseCard({
               onClick={() => scheduleActions.toggleDropped(c.key)}
               className="btn btn-ghost btn-sm flex-1"
             >
-              {c.dropped ? "Add back" : "Drop"}
+              {c.dropped ? "Add back" : "Cross out"}
             </button>
             <button
               type="button"
               onClick={() => {
                 scheduleActions.removeCourse(c.key);
-                toast(`Removed ${c.key}`);
+                toast(`Removed ${c.key}`, { action: { label: "Undo", onClick: () => scheduleActions.undo() } });
               }}
               className="btn btn-ghost btn-sm flex-1 text-full"
             >
@@ -496,16 +605,37 @@ function CourseCard({
               const profStar = prof ? favorites.instructors.includes(prof) : false;
               const locked = c.locked === s.class_nbr;
               const inUse = picked?.class_nbr === s.class_nbr;
+              const clashes = inUse || c.dropped ? [] : clashesOf(s);
               return (
-                <li key={s.class_nbr} className={cn("px-3.5 py-2.5 text-xs", inUse && "bg-subtle")}>
+                <li
+                  key={s.class_nbr}
+                  onMouseEnter={() => onPreview(s)}
+                  onMouseLeave={() => onPreview(null)}
+                  onFocus={() => onPreview(s)}
+                  onBlur={() => onPreview(null)}
+                  className={cn(
+                    "border-l-2 border-transparent px-3.5 py-2.5 text-xs",
+                    inUse && "bg-subtle",
+                    clashes.length && "border-full bg-full-soft/60",
+                  )}
+                >
                   <p className="flex items-center gap-1.5">
                     <span className="font-semibold text-ink">§{s.class_section}</span>
                     <SeatBadge status={seatStatus(s)} className="text-[10px]" />
+                    {isOnline(s) ? (
+                      <span className="rounded-sm bg-ink px-1 text-[10px] font-bold uppercase tracking-wider text-white">Online</span>
+                    ) : null}
                     {inUse ? <span className="text-[10px] font-bold uppercase tracking-wider text-ink">In view</span> : null}
                   </p>
                   <p className="mt-0.5 truncate text-ink-2">
-                    {formatDays(s.days) ?? "Online / TBA"} {formatTimeRange(s.start_time, s.end_time) ?? ""}
+                    {formatDays(s.days) ?? (isOnline(s) ? "No set meeting time" : "Time TBA")}{" "}
+                    {formatTimeRange(s.start_time, s.end_time) ?? ""}
                   </p>
+                  {clashes.length ? (
+                    <p className="mt-0.5 font-semibold text-full">
+                      Clashes with {[...new Set(clashes.map((x) => x.label))].join(", ")}
+                    </p>
+                  ) : null}
                   {prof ? (
                     <button
                       type="button"
@@ -631,8 +761,18 @@ function Preferences({ plan }: { plan: SchedulePlan }) {
   return (
     <div className="card space-y-5 p-4">
       <p className="text-sm font-semibold text-ink">
-        Favorites &amp; preferences
+        Preferences
       </p>
+
+      <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-ink-2">
+        Include online sections
+        <input
+          type="checkbox"
+          checked={plan.includeOnline}
+          onChange={(e) => scheduleActions.setIncludeOnline(e.target.checked)}
+          className="h-4 w-4 accent-[var(--accent-ink)]"
+        />
+      </label>
 
       <label className="flex cursor-pointer items-center justify-between gap-3 text-sm text-ink-2">
         Open seats only
@@ -739,7 +879,7 @@ function Notices({ plan, result }: { plan: SchedulePlan; result: ReturnType<type
   if (!active.length) {
     return (
       <div className="rounded-lg border border-dashed border-line-strong px-5 py-4 text-sm text-muted">
-        Your week is empty. Add courses on the left; you can already block out your own time below.
+        Nothing here yet. Add a class, or drag on the grid to block off time you&apos;re busy.
       </div>
     );
   }
@@ -748,8 +888,26 @@ function Notices({ plan, result }: { plan: SchedulePlan; result: ReturnType<type
     return (
       <div className="rounded-lg border border-low/30 bg-low-soft px-4 py-3 text-sm text-ink-2">
         <p>
-          Left out: <span className="font-semibold text-ink">{result.blocked.map((b) => b.key).join(", ")}</span>. Open the
-          course to see why.
+          Left out: <span className="font-semibold text-ink">{result.blocked.map((b) => b.key).join(", ")}</span>. Open it
+          to see why.
+        </p>
+      </div>
+    );
+  }
+  if (result.clashView?.groups.length) {
+    return (
+      <div className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink-2">
+        <p>
+          {result.clashView.groups.map((g, i) => (
+            <span key={g.join()}>
+              {i ? " " : ""}
+              <span className="font-semibold" style={{ color: CLASH_COLORS[i % CLASH_COLORS.length].text }}>
+                {g.join(" and ")}
+              </span>{" "}
+              overlap{result.conflictPairs.some(([a, b]) => g.includes(a) && g.includes(b)) ? " in every section" : ""}.
+            </span>
+          ))}{" "}
+          Hit × on one to cross it out, or move a blocked-off hour.
         </p>
       </div>
     );
@@ -757,17 +915,9 @@ function Notices({ plan, result }: { plan: SchedulePlan; result: ReturnType<type
   return (
     <div className="rounded-lg border border-full/25 bg-full-soft px-4 py-3 text-sm text-ink-2">
       <p>
-        {result.culprits.length ? (
-          <>
-            These courses can&apos;t all fit together:{" "}
-            <span className="font-semibold text-ink">{result.culprits.join(", ")}</span>. Drop one, unlock a section, or
-            move a commitment.
-          </>
-        ) : result.blocked.length === active.length ? (
-          "None of your courses has a section that works. Open each one to see why."
-        ) : (
-          "No combination of sections fits. Try dropping a course, unlocking a section, or moving a commitment."
-        )}
+        {result.blocked.length === active.length
+          ? "None of your classes has a section that works. Open each one to see why."
+          : "No mix of sections fits. Cross out a class, unlock a section, or move a blocked-off hour."}
       </p>
     </div>
   );
@@ -775,7 +925,6 @@ function Notices({ plan, result }: { plan: SchedulePlan; result: ReturnType<type
 
 function ScheduleTable({
   picks,
-  unscheduled,
   plan,
   colorOf,
   watched,
@@ -784,7 +933,6 @@ function ScheduleTable({
   onPing,
 }: {
   picks: ClassSection[];
-  unscheduled: ClassSection[];
   plan: SchedulePlan;
   colorOf: (key: string) => CourseColor;
   watched: Set<number>;
@@ -812,9 +960,10 @@ function ScheduleTable({
                   <SeatBadge status={seatStatus(s)} />
                 </span>
                 <span className="mt-0.5 block truncate text-sm text-muted">
-                  {instructorName(s) ?? "Staff"} · {formatDays(s.days) ?? "Online / TBA"} {formatTimeRange(s.start_time, s.end_time) ?? ""} ·{" "}
+                  {instructorName(s) ?? "Staff"} · {isOnline(s) ? "Online · " : ""}
+                  {formatDays(s.days) ?? (isOnline(s) ? "no set meeting time" : "Time TBA")}{" "}
+                  {formatTimeRange(s.start_time, s.end_time) ?? ""} ·{" "}
                   {sectionCredits(s) ?? "?"} cr
-                  {unscheduled.includes(s) ? " · no set meeting time" : ""}
                 </span>
               </button>
               <button

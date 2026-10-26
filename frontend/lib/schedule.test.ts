@@ -7,6 +7,7 @@ import {
   courseKey,
   formatClock,
   parseClock,
+  sectionClashes,
   sectionCredits,
   sectionSlots,
   type Commitment,
@@ -133,6 +134,23 @@ test("favorites rank first: starred section, professor, time of day, day off", (
   assert.equal(fridayOff.schedules[0].picks[0], b);
 });
 
+test("online sections join in-person ones unless switched off", () => {
+  const inPerson = section("ENG", "101", "MW", "9:30 AM", "10:45 AM", { campus: "HBG" });
+  const online = section("ENG", "101", "", "", "", { campus: "ONLNE" });
+  const work: Commitment = { id: "w", label: "Work", day: "M", start: 9 * 60, end: 12 * 60 };
+  const c = course([inPerson, online], { campus: "HBG" });
+
+  const withOnline = buildSchedules([c], [work], NO_FAV, { onlyOpen: false });
+  assert.deepEqual(withOnline.schedules.map((s) => s.picks[0]), [online]);
+
+  const without = buildSchedules([c], [work], NO_FAV, { onlyOpen: false, includeOnline: false });
+  assert.equal(without.schedules.length, 0);
+
+  // when both fit, in-person ranks first
+  const both = buildSchedules([c], [], NO_FAV, { onlyOpen: false });
+  assert.equal(both.schedules[0].picks[0], inPerson);
+});
+
 test("locked and dropped courses", () => {
   const a = section("MAT", "167", "MWF", "8:00 AM", "8:50 AM");
   const b = section("MAT", "167", "TR", "2:00 PM", "3:15 PM");
@@ -155,4 +173,40 @@ test("names the courses that make everything impossible", () => {
   const res = buildSchedules([mat, csc, eng], [], NO_FAV, { onlyOpen: false });
   assert.equal(res.schedules.length, 0);
   assert.deepEqual(res.culprits.sort(), ["CSC 101", "MAT 167"]);
+  assert.deepEqual(res.conflictPairs, [["MAT 167", "CSC 101"]]);
+});
+
+test("clashView draws the closest week, grouping courses that overlap", () => {
+  const mat = section("MAT", "167", "TR", "1:00 PM", "2:15 PM");
+  const csc = section("CSC", "101", "TR", "1:30 PM", "2:45 PM");
+  const eng = section("ENG", "101", "MW", "9:00 AM", "9:50 AM");
+  const engLate = section("ENG", "101", "TR", "2:00 PM", "3:15 PM");
+  const res = buildSchedules(
+    [course([mat]), course([csc]), course([engLate, eng])],
+    [],
+    NO_FAV,
+    { onlyOpen: false },
+  );
+  assert.equal(res.schedules.length, 0);
+  // ENG has a section clear of both, so only MAT and CSC tangle
+  assert.deepEqual(res.clashView?.picks, [mat, csc, eng]);
+  assert.deepEqual(res.clashView?.groups, [["MAT 167", "CSC 101"]]);
+
+  const fits = buildSchedules([course([mat]), course([eng])], [], NO_FAV, { onlyOpen: false });
+  assert.equal(fits.clashView, null);
+});
+
+test("sectionClashes names the class or commitment in the way", () => {
+  const mat = section("MAT", "167", "TR", "1:00 PM", "2:15 PM");
+  const csc = section("CSC", "101", "TR", "1:30 PM", "2:45 PM");
+  const other = section("CSC", "101", "MW", "9:00 AM", "9:50 AM");
+  const work: Commitment = { id: "w", label: "Work", day: "M", start: 8 * 60, end: 10 * 60 };
+  assert.deepEqual(
+    sectionClashes(csc, [mat], [work]).map((c) => c.label),
+    [`MAT 167 §${mat.class_section}`],
+  );
+  assert.deepEqual(
+    sectionClashes(other, [mat, other], [work]).map((c) => c.label),
+    ["Work"],
+  );
 });

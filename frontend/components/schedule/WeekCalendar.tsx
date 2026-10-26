@@ -11,10 +11,49 @@ export type CalendarEvent = Slot & {
   color: CourseColor;
   /** dimmed, e.g. a full section */
   muted?: boolean;
+  /** in conflict with the section being previewed */
+  clash?: boolean;
+  /** a previewed section drawn over the week, not part of the schedule */
+  ghost?: boolean;
+  /** overlaps another class; drawn in its clash group's color */
+  conflict?: boolean;
+  /** shows an × on the block that takes the course out */
+  onCrossOut?: () => void;
   onClick?: () => void;
 };
 
 export type CourseColor = { bg: string; border: string; text: string };
+
+/** One per group of courses that overlap each other, so a tangle reads as one color. */
+export const CLASH_COLORS: CourseColor[] = [
+  { bg: "var(--full-soft)", border: "var(--full)", text: "var(--full)" },
+  { bg: "var(--low-soft)", border: "var(--low)", text: "var(--low)" },
+  { bg: "var(--subtle)", border: "var(--ink)", text: "var(--ink)" },
+];
+
+/** Side-by-side columns for overlapping blocks within one day. */
+function lanes(events: CalendarEvent[]): Map<string, { lane: number; of: number }> {
+  const out = new Map<string, { lane: number; of: number }>();
+  const sorted = [...events].sort((a, b) => a.start - b.start || b.end - a.end);
+  let cluster: { id: string; lane: number }[] = [];
+  let clusterEnd = -1;
+  let laneEnds: number[] = [];
+  const flush = () => {
+    for (const c of cluster) out.set(c.id, { lane: c.lane, of: laneEnds.length });
+    cluster = [];
+    laneEnds = [];
+  };
+  for (const ev of sorted) {
+    if (ev.start >= clusterEnd) flush();
+    let lane = laneEnds.findIndex((end) => end <= ev.start);
+    if (lane < 0) lane = laneEnds.push(ev.end) - 1;
+    else laneEnds[lane] = ev.end;
+    cluster.push({ id: ev.id, lane });
+    clusterEnd = Math.max(clusterEnd, ev.end);
+  }
+  flush();
+  return out;
+}
 
 /** Course fills from the site palette: gold, black, and neutrals. */
 export const COURSE_COLORS: CourseColor[] = [
@@ -35,6 +74,8 @@ type Props = {
   onAddCommitment: (c: Commitment) => void;
   onUpdateCommitment: (id: string, patch: Partial<Commitment>) => void;
   onRemoveCommitment: (id: string) => void;
+  /** commitments in conflict with the section being previewed */
+  clashingCommitments?: Set<string>;
 };
 
 type Drag =
@@ -49,7 +90,14 @@ const newId = () => Math.random().toString(36).slice(2, 10);
  * the student's own commitments can be drawn (drag on empty space), moved
  * (drag the block, even across days) and resized (drag the bottom edge).
  */
-export function WeekCalendar({ events, commitments, onAddCommitment, onUpdateCommitment, onRemoveCommitment }: Props) {
+export function WeekCalendar({
+  events,
+  commitments,
+  onAddCommitment,
+  onUpdateCommitment,
+  onRemoveCommitment,
+  clashingCommitments,
+}: Props) {
   const gridRef = useRef<HTMLDivElement>(null);
   const [drag, setDragState] = useState<Drag | null>(null);
   // handlers read the ref: a fast release can arrive before React re-renders
@@ -236,39 +284,65 @@ export function WeekCalendar({ events, commitments, onAddCommitment, onUpdateCom
                 backgroundSize: `100% ${HOUR_PX}px, 100% ${HOUR_PX / 2}px`,
               }}
             />
-            {days.map((d) => (
+            {days.map((d) => {
+              const placed = events.filter((ev) => ev.day === d && !ev.ghost);
+              const lane = lanes(placed);
+              return (
               <div key={d} className="relative border-l border-line">
-                {events
-                  .filter((ev) => ev.day === d)
-                  .map((ev) => (
-                    <button
+                {placed.map((ev) => {
+                  const { lane: i, of } = lane.get(ev.id)!;
+                  return (
+                    <div
                       key={ev.id}
-                      type="button"
                       onPointerDown={(e) => e.stopPropagation()}
-                      onClick={ev.onClick}
                       className={cn(
-                        "absolute inset-x-1 z-10 overflow-hidden rounded-[3px] border px-1.5 py-1 text-left transition-[filter] hover:brightness-95",
+                        "absolute z-10 overflow-hidden rounded-[3px] border transition-[filter] hover:brightness-95",
                         ev.muted && "opacity-70 [background-image:repeating-linear-gradient(135deg,transparent_0_6px,rgb(255_255_255/0.55)_6px_12px)]",
+                        ev.conflict && "border-2",
+                        ev.clash && "z-20 opacity-100 ring-2 ring-full ring-offset-1",
                       )}
                       style={{
                         top: top(ev.start),
                         height: height(ev),
+                        left: `calc(${(i / of) * 100}% + ${i ? 1 : 4}px)`,
+                        width: `calc(${100 / of}% - ${of > 1 ? 3 : 8}px)`,
                         background: ev.color.bg,
                         borderColor: ev.color.border,
                         color: ev.color.text,
                       }}
                     >
-                      <span className="block truncate text-xs font-bold leading-tight">{ev.title}</span>
-                      {ev.end - ev.start >= 45 ? (
-                        <span className="block truncate text-[11px] leading-tight opacity-80">{ev.subtitle}</span>
+                      {ev.onCrossOut ? (
+                        <button
+                          type="button"
+                          onClick={ev.onCrossOut}
+                          aria-label={`Cross out ${ev.title}`}
+                          title="Cross out this course"
+                          className="peer absolute bottom-0 right-0 z-10 grid h-5 w-5 place-items-center rounded-sm text-sm font-bold leading-none hover:bg-current/10"
+                        >
+                          ×
+                        </button>
                       ) : null}
-                      {ev.end - ev.start >= 70 ? (
-                        <span className="block truncate text-[10px] tabular-nums leading-tight opacity-75">
-                          {formatClock(ev.start, true)}–{formatClock(ev.end, true)}
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
+                      <button
+                        type="button"
+                        onClick={ev.onClick}
+                        className={cn(
+                          "block h-full w-full px-1.5 py-1 text-left",
+                          ev.onCrossOut && "peer-hover:line-through peer-hover:opacity-60",
+                        )}
+                      >
+                        <span className="block truncate text-xs font-bold leading-tight">{ev.title}</span>
+                        {ev.end - ev.start >= 45 ? (
+                          <span className="block truncate text-[11px] leading-tight opacity-80">{ev.subtitle}</span>
+                        ) : null}
+                        {ev.end - ev.start >= 70 && !ev.conflict ? (
+                          <span className="block truncate text-[10px] tabular-nums leading-tight opacity-75">
+                            {formatClock(ev.start, true)}–{formatClock(ev.end, true)}
+                          </span>
+                        ) : null}
+                      </button>
+                    </div>
+                  );
+                })}
 
                 {shown
                   .filter((c) => c.day === d)
@@ -285,6 +359,7 @@ export function WeekCalendar({ events, commitments, onAddCommitment, onUpdateCom
                       className={cn(
                         "group absolute inset-x-1 z-10 cursor-grab overflow-hidden rounded-[3px] border border-ink/25 px-1.5 py-1 text-ink",
                         selected === c.id && "z-20 ring-2 ring-ink",
+                        clashingCommitments?.has(c.id) && "z-20 ring-2 ring-full ring-offset-1",
                       )}
                       style={{
                         top: top(c.start),
@@ -309,6 +384,24 @@ export function WeekCalendar({ events, commitments, onAddCommitment, onUpdateCom
                     </div>
                   ))}
 
+                {events
+                  .filter((ev) => ev.day === d && ev.ghost)
+                  .map((ev) => (
+                    <div
+                      key={ev.id}
+                      className={cn(
+                        "pointer-events-none absolute left-4 right-1 z-30 overflow-hidden rounded-[3px] border-2 border-dashed px-1.5 py-1",
+                        ev.clash ? "border-full bg-full-soft/90 text-full" : "border-ink/60 bg-surface/90 text-ink",
+                      )}
+                      style={{ top: top(ev.start), height: height(ev) }}
+                    >
+                      <span className="block truncate text-xs font-bold leading-tight">{ev.title}</span>
+                      {ev.end - ev.start >= 45 ? (
+                        <span className="block truncate text-[11px] leading-tight">{ev.subtitle}</span>
+                      ) : null}
+                    </div>
+                  ))}
+
                 {draft && draft.day === d ? (
                   <div
                     className="pointer-events-none absolute inset-x-1 z-20 rounded-[3px] border-2 border-dashed border-ink/60 bg-surface/90 px-1.5 py-1"
@@ -320,7 +413,8 @@ export function WeekCalendar({ events, commitments, onAddCommitment, onUpdateCom
                   </div>
                 ) : null}
               </div>
-            ))}
+              );
+            })}
 
             {editing && !drag ? (
               <CommitmentEditor

@@ -41,7 +41,7 @@ function watchErrorMessage(err: unknown): string {
 
 const PHYSICAL_CAMPUSES = [
   { value: "HBG", label: "Hattiesburg" },
-  { value: "GULF", label: "Gulf Park" },
+  { value: "USMGC", label: "Gulf Park" },
 ] as const;
 
 // "Starts after" choices, 24h "HH:MM" (toUsmTime converts for the API)
@@ -89,7 +89,7 @@ function toParams(f: Filters): SearchParams | null {
     subject: parsed.subject,
     catalog_nbr: parsed.catalog_nbr,
     instructor_name: f.instructor_last || f.instructor_name.trim() || undefined,
-    campus: f.online ? "ONLINE" : f.campus || undefined,
+    campus: f.online ? "ONLNE" : f.campus || undefined,
     days: f.days.length ? f.days.join(",") : undefined,
     start_time_ge: toUsmTime(f.start_time_ge) || f.start_time_ge || undefined,
   };

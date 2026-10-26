@@ -10,6 +10,7 @@ import {
   type PlannedCourse,
   type TimeOfDay,
 } from "@/lib/schedule";
+import { UndoStack } from "@/lib/undo";
 
 /**
  * The schedule builder's saved plan: the course basket, the student's own
@@ -21,6 +22,7 @@ export type SchedulePlan = {
   commitments: Commitment[];
   favorites: Favorites;
   onlyOpen: boolean;
+  includeOnline: boolean;
 };
 
 const STORAGE_KEY = "pmn_schedule_v1";
@@ -30,11 +32,17 @@ const EMPTY_PLAN: SchedulePlan = {
   commitments: [],
   favorites: { sections: [], instructors: [], times: [], daysOff: [] },
   onlyOpen: false,
+  includeOnline: true,
 };
+
+// early builds saved the search page's old campus values
+const CAMPUS_FIXES: Record<string, string> = { GULF: "USMGC", ONLINE: "ONLNE" };
 
 let plan: SchedulePlan = EMPTY_PLAN;
 let loaded = false;
 const listeners = new Set<() => void>();
+// earlier plans for Ctrl+Z; this visit only
+const history = new UndoStack<SchedulePlan>();
 
 function load() {
   if (loaded || typeof window === "undefined") return;
@@ -43,16 +51,35 @@ function load() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw) as Partial<SchedulePlan>;
-      plan = { ...EMPTY_PLAN, ...saved, favorites: { ...EMPTY_PLAN.favorites, ...saved.favorites } };
+      plan = {
+        ...EMPTY_PLAN,
+        ...saved,
+        favorites: { ...EMPTY_PLAN.favorites, ...saved.favorites },
+        courses: (saved.courses ?? []).map((c) => ({ ...c, campus: (c.campus && CAMPUS_FIXES[c.campus]) || c.campus })),
+      };
     }
   } catch {
     /* storage blocked or corrupt: start fresh */
   }
 }
 
-function setPlan(update: (prev: SchedulePlan) => SchedulePlan) {
+type SetOptions = {
+  /** false for changes the student didn't make, like refreshed seat counts */
+  undoable?: boolean;
+  /** quick repeats in one group are a single undo step */
+  group?: string;
+};
+
+function setPlan(update: (prev: SchedulePlan) => SchedulePlan, { undoable = true, group }: SetOptions = {}) {
   load();
+  const prev = plan;
   plan = update(plan);
+  if (plan === prev) return;
+  if (undoable) history.push(prev, group);
+  commit();
+}
+
+function commit() {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(plan));
   } catch {
@@ -67,6 +94,8 @@ function subscribe(listener: () => void) {
     if (e.key !== STORAGE_KEY) return;
     loaded = false;
     plan = EMPTY_PLAN;
+    // another tab changed the plan; our history no longer applies
+    history.clear();
     load();
     listener();
   };
@@ -88,8 +117,8 @@ function toggle<T>(list: T[], item: T): T[] {
   return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 }
 
-function mapCourse(key: string, fn: (c: PlannedCourse) => PlannedCourse) {
-  setPlan((p) => ({ ...p, courses: p.courses.map((c) => (c.key === key ? fn(c) : c)) }));
+function mapCourse(key: string, fn: (c: PlannedCourse) => PlannedCourse, opts?: SetOptions) {
+  setPlan((p) => ({ ...p, courses: p.courses.map((c) => (c.key === key ? fn(c) : c)) }), opts);
 }
 
 export const scheduleActions = {
@@ -170,7 +199,7 @@ export const scheduleActions = {
   /** Replace a course's sections with fresh seat counts. */
   refreshSections(key: string, sections: ClassSection[]) {
     const fresh = sections.filter((s) => courseKey(s) === key);
-    if (fresh.length) mapCourse(key, (c) => ({ ...c, sections: fresh }));
+    if (fresh.length) mapCourse(key, (c) => ({ ...c, sections: fresh }), { undoable: false });
   },
 
   removeCourse(key: string) {
@@ -205,15 +234,23 @@ export const scheduleActions = {
     setPlan((p) => ({ ...p, onlyOpen }));
   },
 
+  setIncludeOnline(includeOnline: boolean) {
+    setPlan((p) => ({ ...p, includeOnline }));
+  },
+
   addCommitment(c: Commitment) {
     setPlan((p) => ({ ...p, commitments: [...p.commitments, c] }));
   },
 
   updateCommitment(id: string, patch: Partial<Commitment>) {
-    setPlan((p) => ({
-      ...p,
-      commitments: p.commitments.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    }));
+    setPlan(
+      (p) => ({
+        ...p,
+        commitments: p.commitments.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+      }),
+      // typing a label is one step; moves and resizes each get their own
+      { group: "label" in patch ? `label:${id}` : undefined },
+    );
   },
 
   removeCommitment(id: string) {
@@ -222,6 +259,18 @@ export const scheduleActions = {
 
   clearAll() {
     setPlan(() => EMPTY_PLAN);
+  },
+
+  /** Step back to the plan before the last change. False when there's nothing to undo. */
+  undo(): boolean {
+    load();
+    const prev = history.pop();
+    if (!prev) return false;
+    // keep seat counts refreshed since that snapshot
+    const now = new Map(plan.courses.map((c) => [c.key, c.sections]));
+    plan = { ...prev, courses: prev.courses.map((c) => ({ ...c, sections: now.get(c.key) ?? c.sections })) };
+    commit();
+    return true;
   },
 };
 
