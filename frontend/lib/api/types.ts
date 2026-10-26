@@ -39,6 +39,12 @@ export type ClassSection = {
   end_time?: string;
   instructor_name?: string;
   instr_first_name?: string;
+  /** Credit hours, usually "3"; occasionally a range like "1-3". */
+  units?: string;
+  /** "LEC", "LAB", ... */
+  component?: string;
+  /** Every scheduled meeting; days/start_time/end_time only hold the first. */
+  times?: { days: string; start_time: string; end_time: string }[];
 };
 
 export type SearchResponse = {

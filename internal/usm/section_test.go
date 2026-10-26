@@ -22,6 +22,25 @@ func TestFlatten(t *testing.T) {
 	}
 }
 
+func TestFlattenKeepsEveryMeeting(t *testing.T) {
+	s := Section{
+		ClassSection: ClassSection{Units: "4", Component: "LEC"},
+		Meetings: []Meeting{
+			{Days: "MoWe", StartTime: "08.00.00.000000", EndTime: "09.15.00.000000"},
+			{Days: "TBA"},
+			{Days: "Th", StartTime: "18.00.00.000000", EndTime: "20.50.00.000000"},
+		},
+	}
+	got := s.Flatten()
+	want := []TimeSlot{{"MW", "8:00 AM", "9:15 AM"}, {"R", "6:00 PM", "8:50 PM"}}
+	if len(got.Times) != 2 || got.Times[0] != want[0] || got.Times[1] != want[1] {
+		t.Errorf("times = %+v, want %+v", got.Times, want)
+	}
+	if got.Units != "4" || got.Component != "LEC" {
+		t.Errorf("units/component = %q %q", got.Units, got.Component)
+	}
+}
+
 func TestFlattenTBAAndStaff(t *testing.T) {
 	s := Section{
 		Meetings:    []Meeting{{Days: "TBA"}},
@@ -73,6 +92,9 @@ func TestFlattenRealUSMResponse(t *testing.T) {
 		c := s.Flatten()
 		if c.ClassNbr == 0 || c.Subject != "MAT" || c.CatalogNbr == "" || c.Descr == "" || c.ClassCapacity == 0 {
 			t.Errorf("core fields missing: %+v", c)
+		}
+		if c.Units == "" || c.Component == "" {
+			t.Errorf("%s-%s: units/component not decoded", c.CatalogNbr, c.ClassSection)
 		}
 		if s.Meetings[0].Days != "TBA" && (c.Days == "" || c.StartTime == "" || !strings.HasSuffix(c.StartTime, "M")) {
 			t.Errorf("%s-%s: schedule not flattened: %q %q", c.CatalogNbr, c.ClassSection, c.Days, c.StartTime)

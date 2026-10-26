@@ -9,9 +9,11 @@ import { CourseCombobox, ProfessorCombobox } from "@/components/search/CourseCom
 import { SectionDetailModal } from "@/components/search/SectionDetailModal";
 import { SeatBadge, SeatMeter } from "@/components/ui/Seats";
 import { useCourseIndex } from "@/hooks/useCourseIndex";
+import { scheduleActions, useSchedulePlan } from "@/hooks/useSchedulePlan";
 import { useThrottledCallback } from "@/hooks/useThrottledCallback";
 import { usePingApi } from "@/hooks/usePingApi";
 import { cn } from "@/lib/cn";
+import { courseKey } from "@/lib/schedule";
 import {
   formatDays,
   formatTimeRange,
@@ -109,6 +111,9 @@ export default function SearchPage() {
   const [label, setLabel] = useState("");
   const [detail, setDetail] = useState<ClassSection | null>(null);
   const [onlyOpen, setOnlyOpen] = useState(false);
+  // campus filter of the search that produced `classes`, so the builder can rerun it
+  const [resultCampus, setResultCampus] = useState<string | undefined>();
+  const plan = useSchedulePlan();
 
   const runSearch = useCallback(
     async (requested: Filters) => {
@@ -137,6 +142,7 @@ export default function SearchPage() {
         if (id !== reqId.current) return;
         const list = res.classes ?? [];
         setClasses(list);
+        setResultCampus(payload.campus);
         setPhase(list.length ? "ready" : "empty");
       } catch {
         if (id !== reqId.current) return;
@@ -229,6 +235,30 @@ export default function SearchPage() {
     } finally {
       setWatching(null);
     }
+  };
+
+  /** in the builder already, with this exact section starred */
+  const inSchedule = (section: ClassSection) =>
+    plan.favorites.sections.includes(section.class_nbr) &&
+    plan.courses.some((c) => c.key === courseKey(section) && !c.dropped);
+
+  const onAddToSchedule = (section: ClassSection) => {
+    if (inSchedule(section)) {
+      router.push("/schedule");
+      return;
+    }
+    const added = scheduleActions.addSection(section, classes, resultCampus);
+    toast.success(
+      added
+        ? `Added ${courseKey(section)} to your schedule`
+        : `Starred §${section.class_section} of ${courseKey(section)}`,
+      {
+        description: added
+          ? `§${section.class_section} is starred, so it leads your schedules.`
+          : "Schedules with this section now rank first.",
+        action: { label: "Open builder", onClick: () => router.push("/schedule") },
+      },
+    );
   };
 
   const activeFilters = useMemo(() => {
@@ -594,6 +624,8 @@ export default function SearchPage() {
                       saving={watching === c.class_nbr}
                       onOpen={() => setDetail(c)}
                       onPing={() => void onPing(c)}
+                      inSchedule={inSchedule(c)}
+                      onAddToSchedule={() => onAddToSchedule(c)}
                     />
                   ))}
                 </ul>
@@ -613,6 +645,8 @@ export default function SearchPage() {
             setSignInFor(null);
           }}
           onPing={() => void onPing(detail)}
+          inSchedule={inSchedule(detail)}
+          onAddToSchedule={() => onAddToSchedule(detail)}
         />
       ) : null}
     </>
@@ -624,11 +658,15 @@ function SectionRow({
   saving,
   onOpen,
   onPing,
+  inSchedule,
+  onAddToSchedule,
 }: {
   section: ClassSection;
   saving: boolean;
   onOpen: () => void;
   onPing: () => void;
+  inSchedule: boolean;
+  onAddToSchedule: () => void;
 }) {
   const status = seatStatus(c);
   const instructor = instructorLabel(c);
@@ -672,18 +710,29 @@ function SectionRow({
 
       <SeatMeter status={status} avail={avail} cap={cap} className="sm:w-44" />
 
-      <button
-        type="button"
-        disabled={saving}
-        onClick={onPing}
-        className={cn(
-          "btn btn-sm relative z-10 sm:w-32",
-          full ? "btn-accent" : "btn-secondary",
-        )}
-      >
-        <Bell className="h-4 w-4" aria-hidden />
-        {saving ? "Saving…" : "Ping me"}
-      </button>
+      <div className="relative z-10 flex gap-2 sm:flex-col">
+        <button
+          type="button"
+          onClick={onAddToSchedule}
+          aria-pressed={inSchedule}
+          title={inSchedule ? "In your schedule. Open the builder" : "Add to schedule builder"}
+          className={cn("btn btn-sm flex-1 sm:w-40", inSchedule ? "btn-primary" : "btn-ghost border border-line")}
+        >
+          {inSchedule ? "In schedule" : "Add to schedule"}
+        </button>
+        <button
+          type="button"
+          disabled={saving}
+          onClick={onPing}
+          className={cn(
+            "btn btn-sm flex-1 sm:w-40",
+            full ? "btn-accent" : "btn-secondary",
+          )}
+        >
+          <Bell className="h-4 w-4" aria-hidden />
+          {saving ? "Saving…" : "Ping me"}
+        </button>
+      </div>
     </li>
   );
 }

@@ -28,6 +28,19 @@ type ClassSection struct {
 	EndTime         string `json:"end_time,omitempty"`
 	InstructorLast  string `json:"instructor_name,omitempty"`
 	InstructorFirst string `json:"instr_first_name,omitempty"`
+
+	// Units is USM's credit hours, usually "3" but sometimes a range ("1-3").
+	Units     string `json:"units,omitempty"`
+	Component string `json:"component,omitempty"`
+	// Times lists every scheduled meeting; Days/StartTime/EndTime only carry
+	// the first, which misses classes like a lecture plus a separate lab night.
+	Times []TimeSlot `json:"times,omitempty"`
+}
+
+type TimeSlot struct {
+	Days      string `json:"days"`
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
 }
 
 type ClassSearchResponse struct {
@@ -64,14 +77,16 @@ func (s Section) Flatten() ClassSection {
 	out := s.ClassSection
 	// some sections list a "TBA" meeting before the real one; use the first
 	// meeting that has a schedule
+	var times []TimeSlot
 	for _, m := range s.Meetings {
 		if m.Days == "" || m.Days == "TBA" {
 			continue
 		}
-		out.Days = daysToLetters(m.Days)
-		out.StartTime = clockTime(m.StartTime)
-		out.EndTime = clockTime(m.EndTime)
-		break
+		times = append(times, TimeSlot{daysToLetters(m.Days), clockTime(m.StartTime), clockTime(m.EndTime)})
+	}
+	if len(times) > 0 {
+		out.Days, out.StartTime, out.EndTime = times[0].Days, times[0].StartTime, times[0].EndTime
+		out.Times = times
 	}
 	if len(s.Instructors) > 0 {
 		name := strings.TrimSpace(s.Instructors[0].Name)

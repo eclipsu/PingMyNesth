@@ -19,9 +19,20 @@ type Props = {
   pinging?: boolean;
   /** Visitor tried to watch while signed out — swap the CTA for a sign-in prompt. */
   needsSignIn?: boolean;
+  /** Offer "Add to schedule" (search page only). */
+  onAddToSchedule?: () => void;
+  inSchedule?: boolean;
 };
 
-export function SectionDetailModal({ section, onClose, onPing, pinging, needsSignIn }: Props) {
+export function SectionDetailModal({
+  section,
+  onClose,
+  onPing,
+  pinging,
+  needsSignIn,
+  onAddToSchedule,
+  inSchedule,
+}: Props) {
   const status = seatStatus(section);
   const professor = instructorLabel(section);
   const days = formatDays(section.days);
@@ -61,6 +72,9 @@ export function SectionDetailModal({ section, onClose, onPing, pinging, needsSig
             <DetailItem icon={<Calendar className="h-4 w-4" />} label="Days" value={days || "TBA"} />
             <DetailItem icon={<Clock className="h-4 w-4" />} label="Time" value={time || "TBA"} />
             <DetailItem icon={<Hash className="h-4 w-4" />} label="CRN" value={String(section.class_nbr)} mono />
+            {section.units ? (
+              <DetailItem icon={<Hash className="h-4 w-4" />} label="Credits" value={section.units} />
+            ) : null}
             {section.campus ? (
               <DetailItem icon={<MapPin className="h-4 w-4" />} label="Campus" value={section.campus} />
             ) : null}
@@ -88,6 +102,11 @@ export function SectionDetailModal({ section, onClose, onPing, pinging, needsSig
               {pinging ? "Saving…" : full ? "Ping me when a seat opens" : "Watch this section"}
             </button>
           )}
+          {onAddToSchedule ? (
+            <button type="button" onClick={onAddToSchedule} className="btn btn-secondary mt-2 w-full">
+              {inSchedule ? "In your schedule: open builder" : "Add to schedule builder"}
+            </button>
+          ) : null}
           <p className="mt-3 text-center text-xs text-muted">
             One email per opening. Stop watching anytime.
           </p>
