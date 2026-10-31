@@ -60,7 +60,11 @@ const siteJsonLd = {
       name: SITE_NAME,
       url: SITE_URL,
       logo: `${SITE_URL}/images/eaglesnest-mark.png`,
-      sameAs: ["https://github.com/oscusm/PingMyNest"],
+      sameAs: [
+        "https://github.com/oscusm/PingMyNest",
+        "https://www.instagram.com/pingmynest.usm/",
+        "https://www.instagram.com/oscusm/",
+      ],
     },
     {
       "@type": "WebSite",

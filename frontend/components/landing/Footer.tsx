@@ -22,6 +22,13 @@ const columns = [
       { href: "/terms", label: "Terms & Conditions" },
     ],
   },
+  {
+    title: "Follow",
+    links: [
+      { href: "https://www.instagram.com/pingmynest.usm/", label: "@pingmynest.usm", external: true },
+      { href: "https://www.instagram.com/oscusm/", label: "@oscusm", external: true },
+    ],
+  },
 ];
 
 export function Footer() {
@@ -35,7 +42,7 @@ export function Footer() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-12 sm:gap-20">
+        <div className="grid grid-cols-2 gap-12 sm:grid-cols-3 sm:gap-16">
           {columns.map((col) => (
             <div key={col.title}>
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-accent">{col.title}</p>
